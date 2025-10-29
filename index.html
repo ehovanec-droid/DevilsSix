@@ -387,3 +387,347 @@
             }
             draw();
         }
+
+        canvas.addEventListener('mouseup', handleEnd);
+        canvas.addEventListener('touchend', handleEnd);
+        function handleEnd(e) {
+            e.preventDefault();
+            if (dragging) {
+                const target = getCardAt(mouseX, mouseY);
+                if (target && tryMove(selected, target)) {
+                    checkWin();
+                    checkLose();
+                    updateUI();
+                }
+                dragging = null;
+                selected = null;
+                draw();
+            }
+        }
+
+        function getCardAt(mx, my) {
+            // Foundations
+            const fX = canvas.width - 8 * 70 - 40;
+            const fY = 20;
+            for (let i = 0; i < 8; i++) {
+                const fx = fX + i * 70;
+                if (mx > fx && mx < fx + CARD_W && my > fY && my < fY + CARD_H) {
+                    const stack = foundations[i];
+                    const top = stack.length > 0 ? stack[stack.length - 1] : null;
+                    return {type: 'foundation', suitIdx: i, card: top, x: fx, y: fY};
+                }
+            }
+
+            // Devil's Six
+            const dsX = 20;
+            const dsY = 20;
+            for (let i = 0; i < devilsSix.length; i++) {
+                const dx = dsX + i * (CARD_W + 5);
+                if (mx > dx && mx < dx + CARD_W && my > dsY && my < dsY + CARD_H) {
+                    return {type: 'devils', idx: i, card: devilsSix[i], x: dx, y: dsY};
+                }
+            }
+
+            // Stock
+            const stockX = dsX + 6 * (CARD_W + 5) + 20;
+            const stockY = dsY;
+            if (mx > stockX && mx < stockX + CARD_W && my > stockY && my < stockY + CARD_H && stock.length > 0) {
+                doDeal();
+                return null;
+            }
+
+            // Tableau
+            for (let col = 0; col < 10; col++) {
+                const {x, y} = getXY(col);
+                let py = y;
+                for (let row = 0; row < tableau[col].length; row++) {
+                    if (mx > x && mx < x + CARD_W && my > py && my < py + CARD_H) {
+                        const card = tableau[col][row];
+                        if (card.faceUp) {
+                            return {type: 'tableau', col, idx: row, card, x, y: py};
+                        }
+                    }
+                    py += tableau[col][row].faceUp ? OVERLAP_UP : OVERLAP_DOWN;
+                }
+                if (tableau[col].length === 0 && mx > x && mx < x + CARD_W && my > y && my < y + CARD_H) {
+                    return {type: 'tableau', col, idx: -1, card: null, x, y};
+                }
+            }
+            return null;
+        }
+
+        function tryMove(from, to) {
+            if (!from || !from.card.faceUp) return false;
+
+            let movingCards = [from.card];
+            let fromCol = null;
+            let runLen = 1;
+            if (from.type === 'tableau') {
+                fromCol = from.col;
+                runLen = getBuildLength(tableau[from.col], from.idx);
+                movingCards = tableau[from.col].slice(from.idx, from.idx + runLen);
+                if (runLen < 1) return false;
+            } else if (from.type === 'devils') {
+                runLen = 1;
+            }
+
+            if (to.type === 'foundation') {
+                if (runLen > 1) return false;
+                const card = movingCards[0];
+                const suit = card.suit;
+                const suitIdx = to.suitIdx;
+                if (suits[suitIdx % 4] !== suit) return false;
+                const stack = foundations[suitIdx];
+                const top = stack.length > 0 ? stack[stack.length - 1] : null;
+                if (top ? card.value !== top.value + 1 : card.value !== 1) return false;
+                undoStack.push({fromType: from.type, fromCol, fromIdx: from.idx, movingCards: [...movingCards], toType: to.type, toIdx: suitIdx});
+                stack.push(card);
+                if (from.type === 'tableau') {
+                    tableau[from.col].splice(from.idx, runLen);
+                    flipTop(from.col);
+                } else if (from.type === 'devils') {
+                    devilsSix.splice(from.idx, 1);
+                }
+                return true;
+            } else if (to.type === 'tableau') {
+                if (from.type === 'devils') return false;
+                const toCol = to.col;
+                const card = movingCards[0];
+                const toStack = tableau[toCol];
+                const toTop = toStack.length > 0 ? toStack[toStack.length - 1] : null;
+                if (toTop ? card.value !== toTop.value - 1 || card.color === toTop.color : card.value !== 13) return false;
+                undoStack.push({fromType: from.type, fromCol, fromIdx: from.idx, movingCards: [...movingCards], toType: to.type, toIdx: toCol});
+                toStack.push(...movingCards);
+                tableau[fromCol].splice(from.idx, runLen);
+                flipTop(fromCol);
+                return true;
+            }
+            return false;
+        }
+
+        function getBuildLength(column, startIdx) {
+            if (startIdx >= column.length) return 0;
+            let len = 1;
+            for (let i = startIdx + 1; i < column.length; i++) {
+                const prev = column[i - 1];
+                const curr = column[i];
+                if (!curr.faceUp || prev.color === curr.color || curr.value !== prev.value - 1) break;
+                len++;
+            }
+            return len;
+        }
+
+        function flipTop(col) {
+            if (tableau[col].length > 0 && !tableau[col][tableau[col].length - 1].faceUp) {
+                tableau[col][tableau[col].length - 1].faceUp = true;
+            }
+        }
+
+        function doDeal() {
+            if (stock.length === 0) return;
+            let dealt = 0;
+            const dealtCards = [];
+            for (let col = 0; col < 10; col++) {
+                if (tableau[col].length === 0 || tableau[col][tableau[col].length - 1].value !== 13) {
+                    const card = stock.pop();
+                    card.faceUp = true;
+                    tableau[col].push(card);
+                    dealtCards.push({col, card});
+                    dealt++;
+                }
+            }
+            if (dealt > 0) {
+                dealsLeft++;
+                document.getElementById('deals').textContent = dealsLeft;
+                undoStack.push({type: 'deal', dealtCards});
+            }
+            draw();
+        }
+
+        function hasMoves() {
+            // Foundation moves from tableau tops and DS
+            for (let col = 0; col < 10; col++) {
+                if (tableau[col].length > 0) {
+                    const top = tableau[col][tableau[col].length - 1];
+                    if (top.faceUp && canMoveToFoundation(top)) return true;
+                }
+            }
+            for (let i = 0; i < devilsSix.length; i++) {
+                if (canMoveToFoundation(devilsSix[i])) return true;
+            }
+
+            // Tableau moves
+            for (let fromCol = 0; fromCol < 10; fromCol++) {
+                const col = tableau[fromCol];
+                if (col.length === 0) continue;
+                let faceUpStart = col.findIndex(c => c.faceUp);
+                if (faceUpStart === -1) continue;
+                for (let startIdx = faceUpStart; startIdx < col.length; startIdx++) {
+                    const runLen = getBuildLength(col, startIdx);
+                    if (runLen < 1) continue;
+                    const baseCard = col[startIdx];
+                    for (let toCol = 0; toCol < 10; toCol++) {
+                        if (fromCol === toCol) continue;
+                        const toStack = tableau[toCol];
+                        const toTop = toStack.length > 0 ? toStack[toStack.length - 1] : null;
+                        if (toTop ? baseCard.value === toTop.value - 1 && baseCard.color !== toTop.color : baseCard.value === 13) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function canMoveToFoundation(card) {
+            const suit = card.suit;
+            for (let f = 0; f < 8; f++) {
+                if (suits[f % 4] === suit) {
+                    const stack = foundations[f];
+                    const top = stack.length > 0 ? stack[stack.length - 1] : null;
+                    if (top ? card.value === top.value + 1 : card.value === 1) return true;
+                }
+            }
+            return false;
+        }
+
+        function checkWin() {
+            const totalInFoundations = foundations.reduce((total, stack) => total + stack.length, 0);
+            if (devilsSix.length === 0 && stock.length === 0 && tableau.every(col => col.length === 0) && totalInFoundations === 104 && foundations.every(stack => stack.length === 13 && stack[stack.length - 1].value === 13)) {
+                gameWon = true;
+                const elapsed = Math.floor((Date.now() - timeStart) / 1000);
+                careerScore = parseInt(careerScore) + 1000 - dealsLeft * 100 - Math.floor(elapsed / 10);
+                localStorage.setItem('careerScore', careerScore);
+                document.getElementById('careerScore').textContent = careerScore;
+                showMessage('Victory at All Costs! You Win!');
+                clearInterval(timeInterval);
+                disableButtons(true);
+            }
+        }
+
+        function checkLose() {
+            if (stock.length === 0 && !hasMoves()) {
+                gameLost = true;
+                showMessage('Game Over. No more moves.');
+                clearInterval(timeInterval);
+                disableButtons(true);
+            }
+        }
+
+        function disableButtons(disable) {
+            document.getElementById('deal').disabled = disable;
+            document.getElementById('hint').disabled = disable;
+            document.getElementById('undo').disabled = disable;
+            document.getElementById('newGame').disabled = !disable;
+        }
+
+        function showHint() {
+            if (hintTimeout) clearTimeout(hintTimeout);
+            // Find first foundation move from tableau top
+            for (let col = 0; col < 10; col++) {
+                if (tableau[col].length > 0) {
+                    const top = tableau[col][tableau[col].length - 1];
+                    if (top.faceUp && canMoveToFoundation(top)) {
+                        selected = {type: 'tableau', col, idx: tableau[col].length - 1, card: top};
+                        hintTimeout = setTimeout(() => { selected = null; draw(); }, 1000);
+                        draw();
+                        return;
+                    }
+                }
+            }
+            // From DS
+            for (let i = 0; i < devilsSix.length; i++) {
+                const card = devilsSix[i];
+                if (canMoveToFoundation(card)) {
+                    selected = {type: 'devils', idx: i, card};
+                    hintTimeout = setTimeout(() => { selected = null; draw(); }, 1000);
+                    draw();
+                    return;
+                }
+            }
+            // Tableau move
+            for (let fromCol = 0; fromCol < 10; fromCol++) {
+                const col = tableau[fromCol];
+                if (col.length === 0) continue;
+                let faceUpStart = col.findIndex(c => c.faceUp);
+                if (faceUpStart === -1) continue;
+                for (let startIdx = faceUpStart; startIdx < col.length; startIdx++) {
+                    const runLen = getBuildLength(col, startIdx);
+                    if (runLen < 1) continue;
+                    const baseCard = col[startIdx];
+                    for (let toCol = 0; toCol < 10; toCol++) {
+                        if (fromCol === toCol) continue;
+                        const toStack = tableau[toCol];
+                        const toTop = toStack.length > 0 ? toStack[toStack.length - 1] : null;
+                        if (toTop ? baseCard.value === toTop.value - 1 && baseCard.color !== toTop.color : baseCard.value === 13) {
+                            selected = {type: 'tableau', col: fromCol, idx: startIdx, card: baseCard};
+                            hintTimeout = setTimeout(() => { selected = null; draw(); }, 1000);
+                            draw();
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        function showMessage(text) {
+            document.getElementById('messageText').textContent = text;
+            document.getElementById('message').style.display = 'block';
+        }
+
+        function hideMessage() {
+            document.getElementById('message').style.display = 'none';
+        }
+
+        function updateUI() {
+            document.getElementById('deal').disabled = stock.length === 0;
+            document.getElementById('undo').disabled = undoStack.length === 0;
+            if (gameWon || gameLost) disableButtons(true);
+        }
+
+        // Event listeners
+        document.getElementById('newGame').addEventListener('click', () => {
+            dealGame();
+            undoStack = [];
+            updateUI();
+        });
+        document.getElementById('deal').addEventListener('click', doDeal);
+        document.getElementById('hint').addEventListener('click', showHint);
+        document.getElementById('undo').addEventListener('click', () => {
+            if (undoStack.length === 0) return;
+            const move = undoStack.pop();
+            if (move.type === 'deal') {
+                move.dealtCards.reverse().forEach(dc => {
+                    dc.card.faceUp = false;
+                    stock.push(dc.card);
+                    tableau[dc.col].pop();
+                });
+                dealsLeft--;
+                document.getElementById('deals').textContent = dealsLeft;
+            } else {
+                const {fromType, fromCol, fromIdx, movingCards, toType, toIdx} = move;
+                if (toType === 'foundation') {
+                    foundations[toIdx].pop();
+                } else if (toType === 'tableau') {
+                    tableau[toIdx].splice(-movingCards.length, movingCards.length);
+                }
+                if (fromType === 'tableau') {
+                    tableau[fromCol].splice(fromIdx, 0, ...movingCards);
+                    flipTop(fromCol);
+                } else if (fromType === 'devils') {
+                    devilsSix.splice(fromIdx, 0, movingCards[0]);
+                }
+            }
+            draw();
+            updateUI();
+        });
+
+        function newGame() {
+            dealGame();
+            hideMessage();
+        }
+
+        // Init
+        dealGame();
+        updateUI();
+    </script>
+</body>
+</html>
