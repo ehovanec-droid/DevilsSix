@@ -93,136 +93,297 @@
     </div>
     <canvas id="game"></canvas>
     <script>
-        window.addEventListener('load', () => {
-            const canvas = document.getElementById('game');
-            const ctx = canvas.getContext('2d');
-            let rect = canvas.getBoundingClientRect();
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        let rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        window.addEventListener('resize', () => {
+            rect = canvas.getBoundingClientRect();
             canvas.width = rect.width;
             canvas.height = rect.height;
+            draw();
+        });
 
-            window.addEventListener('resize', () => {
-                rect = canvas.getBoundingClientRect();
-                canvas.width = rect.width;
-                canvas.height = rect.height;
-                draw();
-            });
+        // Suits and ranks
+        const suits = ['♠', '♥', '♦', '♣'];
+        const suitColors = { '♠': 'black', '♥': 'red', '♦': 'red', '♣': 'black' };
+        const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+        const rankValues = { 'A': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
 
-            // Suits and ranks
-            const suits = ['♠', '♥', '♦', '♣'];
-            const suitColors = { '♠': 'black', '♥': 'red', '♦': 'red', '♣': 'black' };
-            const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
-            const rankValues = { 'A': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
-
-            class Card {
-                constructor(suit, rank) {
-                    this.suit = suit;
-                    this.rank = rank;
-                    this.faceUp = false;
-                }
-                get color() { return suitColors[this.suit]; }
-                get value() { return rankValues[this.rank]; }
-                get name() { return this.rank + this.suit; }
+        class Card {
+            constructor(suit, rank) {
+                this.suit = suit;
+                this.rank = rank;
+                this.faceUp = false;
             }
+            get color() { return suitColors[this.suit]; }
+            get value() { return rankValues[this.rank]; }
+            get name() { return this.rank + this.suit; }
+        }
 
-            // Game state
-            let deck = [];
-            let tableau = Array(10).fill().map(() => []);
-            let devilsSix = [];
-            let foundations = Array(8).fill().map(() => []);
-            let stock = [];
-            let selected = null;
-            let dragging = null;
-            let gameWon = false;
-            let gameLost = false;
-            let dealsLeft = 0;
-            let timeStart = 0;
-            let timeInterval = null;
-            let hintTimeout = null;
-            let undoStack = [];
-            let lastDraw = 0;
-            let careerScore = localStorage.getItem('careerScore') || 0;
-            document.getElementById('careerScore').textContent = careerScore;
+        // Game state
+        let deck = [];
+        let tableau = Array(10).fill().map(() => []);
+        let devilsSix = [];
+        let foundations = Array(8).fill().map(() => []);
+        let stock = [];
+        let selected = null;
+        let dragging = null;
+        let gameWon = false;
+        let gameLost = false;
+        let dealsLeft = 0;
+        let timeStart = 0;
+        let timeInterval = null;
+        let hintTimeout = null;
+        let undoStack = [];
+        let lastDraw = 0;
+        let careerScore = localStorage.getItem('careerScore') || 0;
+        document.getElementById('careerScore').textContent = careerScore;
 
-            // Layout
-            let CARD_W = 80;
-            let CARD_H = 120;
-            let OVERLAP_DOWN = 15;
-            let OVERLAP_UP = 35;
+        // Layout
+        let CARD_W = 80;
+        let CARD_H = 120;
+        let OVERLAP_DOWN = 15;
+        let OVERLAP_UP = 35;
 
-            function resizeLayout() {
-                rect = canvas.getBoundingClientRect();
-                const width = rect.width;
-                const height = rect.height;
-                CARD_W = Math.max(60, Math.min(90, width / 15));
-                CARD_H = CARD_W * 1.5;
-                OVERLAP_DOWN = CARD_H * 0.15;
-                OVERLAP_UP = CARD_H * 0.35;
-                const maxStackHeight = (height - CARD_H - 40) / Math.min(OVERLAP_DOWN, OVERLAP_UP);
-                if (tableau.some(col => col.length > maxStackHeight)) {
-                    const scale = maxStackHeight / Math.max(...tableau.map(col => col.length));
-                    CARD_W *= scale;
-                    CARD_H *= scale;
-                    OVERLAP_DOWN *= scale;
-                    OVERLAP_UP *= scale;
-                }
+        function resizeLayout() {
+            rect = canvas.getBoundingClientRect();
+            const width = rect.width;
+            const height = rect.height;
+            CARD_W = Math.max(60, Math.min(90, width / 15));
+            CARD_H = CARD_W * 1.5;
+            OVERLAP_DOWN = CARD_H * 0.15;
+            OVERLAP_UP = CARD_H * 0.35;
+            const maxStackHeight = (height - CARD_H - 40) / Math.min(OVERLAP_DOWN, OVERLAP_UP);
+            if (tableau.some(col => col.length > maxStackHeight)) {
+                const scale = maxStackHeight / Math.max(...tableau.map(col => col.length));
+                CARD_W *= scale;
+                CARD_H *= scale;
+                OVERLAP_DOWN *= scale;
+                OVERLAP_UP *= scale;
             }
+        }
 
-            function initDeck() {
-                deck = [];
-                for (let i = 0; i < 2; i++) {
-                    suits.forEach(suit => {
-                        ranks.forEach(rank => {
-                            deck.push(new Card(suit, rank));
-                        });
+        function initDeck() {
+            deck = [];
+            for (let i = 0; i < 2; i++) {
+                suits.forEach(suit => {
+                    ranks.forEach(rank => {
+                        deck.push(new Card(suit, rank));
                     });
-                }
-                shuffle(deck);
+                });
+            }
+            shuffle(deck);
+        }
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function dealGame() {
+            initDeck();
+            tableau = Array(10).fill().map(() => []);
+            devilsSix = [];
+            foundations = Array(8).fill().map(() => []);
+            stock = [];
+
+            for (let i = 0; i < 6; i++) {
+                devilsSix.push(deck.pop());
+                devilsSix[i].faceUp = true;
             }
 
-            function shuffle(array) {
-                for (let i = array.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [array[i], array[j]] = [array[j], array[i]];
+            const downCounts = [0, 1, 2, 3, 4, 4, 3, 2, 1, 0];
+            for (let col = 0; col < 10; col++) {
+                for (let d = 0; d < downCounts[col]; d++) {
+                    const card = deck.pop();
+                    card.faceUp = false;
+                    tableau[col].push(card);
+                }
+                const upCard = deck.pop();
+                upCard.faceUp = true;
+                tableau[col].push(upCard);
+            }
+
+            stock = deck;
+            dealsLeft = 0;
+            gameWon = false;
+            gameLost = false;
+            if (timeInterval) clearInterval(timeInterval);
+            timeStart = Date.now();
+            timeInterval = setInterval(updateTime, 1000);
+            document.getElementById('deals').textContent = dealsLeft;
+            updateUI();
+            draw();
+        }
+
+        function updateTime() {
+            const elapsed = Math.floor((Date.now() - timeStart) / 1000);
+            const mins = (elapsed / 60 | 0).toString().padStart(2, '0');
+            const secs = (elapsed % 60).toString().padStart(2, '0');
+            document.getElementById('time').textContent = `${mins}:${secs}`;
+        }
+
+        function getXY(col, baseY = CARD_H + 40) {
+            resizeLayout();
+            const startX = 20;
+            const colW = (canvas.width - 40) / 9;
+            const x = startX + col * colW;
+            const y = baseY;
+            return {x, y};
+        }
+
+        function drawCard(card, x, y, highlight = false, isFoundation = false, suitSym = null) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetX = 5;
+            ctx.shadowOffsetY = 5;
+
+            if (card) {
+                ctx.fillStyle = highlight ? '#FFD700' : 'white';
+                ctx.fillRect(0, 0, CARD_W, CARD_H);
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = 'black';
+                ctx.strokeRect(0, 0, CARD_W, CARD_H);
+
+                // Clip to card area
+                ctx.beginPath();
+                ctx.rect(0, 0, CARD_W, CARD_H);
+                ctx.clip();
+
+                if (card.faceUp) {
+                    ctx.fillStyle = card.color;
+                    ctx.font = `${CARD_W / 3}px Arial Black`;
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(card.rank, 8, CARD_H / 4);
+                    ctx.fillText(card.suit, 8, 3 * CARD_H / 4);
+
+                    // Inverted rank and suit at bottom
+                    ctx.save();
+                    ctx.translate(CARD_W - 8, CARD_H - CARD_H / 4);
+                    ctx.rotate(Math.PI);
+                    ctx.fillText(card.rank, -8, 0);
+                    ctx.restore();
+
+                    ctx.save();
+                    ctx.translate(CARD_W - 8, CARD_H - 3 * CARD_H / 4);
+                    ctx.rotate(Math.PI);
+                    ctx.fillText(card.suit, -8, 0);
+                    ctx.restore();
+                } else {
+                    ctx.fillStyle = '#4169E1';
+                    ctx.fillRect(5, 5, CARD_W - 10, CARD_H - 10);
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('CS', CARD_W / 2, CARD_H / 2);
+                }
+            } else {
+                ctx.strokeStyle = 'gold';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.strokeRect(0, 0, CARD_W, CARD_H);
+                ctx.setLineDash([]);
+                if (isFoundation && suitSym) {
+                    ctx.fillStyle = 'gray';
+                    ctx.font = `${CARD_W / 3}px Arial Black`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('A' + suitSym, CARD_W / 2, CARD_H / 2);
                 }
             }
 
-            function dealGame() {
-                initDeck();
-                tableau = Array(10).fill().map(() => []);
-                devilsSix = [];
-                foundations = Array(8).fill().map(() => []);
-                stock = [];
+            ctx.restore();
+        }
 
-                for (let i = 0; i < 6; i++) {
-                    devilsSix.push(deck.pop());
-                    devilsSix[i].faceUp = true;
-                }
+        function draw() {
+            if (Date.now() - lastDraw < 16) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            resizeLayout();
 
-                const downCounts = [0, 1, 2, 3, 4, 4, 3, 2, 1, 0];
-                for (let col = 0; col < 10; col++) {
-                    for (let d = 0; d < downCounts[col]; d++) {
-                        const card = deck.pop();
-                        card.faceUp = false;
-                        tableau[col].push(card);
-                    }
-                    const upCard = deck.pop();
-                    upCard.faceUp = true;
-                    tableau[col].push(upCard);
-                }
-
-                stock = deck;
-                dealsLeft = 0;
-                gameWon = false;
-                gameLost = false;
-                if (timeInterval) clearInterval(timeInterval);
-                timeStart = Date.now();
-                timeInterval = setInterval(updateTime, 1000);
-                document.getElementById('deals').textContent = dealsLeft;
-                updateUI();
-                draw();
+            // Foundations
+            const fX = canvas.width - 8 * 70 - 40; // Added padding
+            const fY = 20;
+            for (let i = 0; i < 8; i++) {
+                const fx = fX + i * 70;
+                const stack = foundations[i];
+                const top = stack.length > 0 ? stack[stack.length - 1] : null;
+                drawCard(top, fx, fY, false, true, suits[i % 4]);
             }
 
-            function updateTime() {
-                const elapsed = Math.floor((Date.now() - timeStart) / 1000);
-                const mins = (elapsed / 60 | 0).toString().padStart(2, '0');
-                const secs = (elapsed
+            // Devil's Six
+            const dsX = 20;
+            const dsY = 20;
+            for (let i = 0; i < devilsSix.length; i++) {
+                drawCard(devilsSix[i], dsX + i * (CARD_W + 5), dsY);
+            }
+
+            // Stock
+            const stockX = dsX + 6 * (CARD_W + 5) + 20;
+            const stockY = dsY;
+            drawCard(stock.length ? {faceUp: false} : null, stockX, stockY);
+
+            // Tableau
+            for (let col = 0; col < 10; col++) {
+                const {x, y} = getXY(col);
+                let rowY = y;
+                for (let j = 0; j < tableau[col].length; j++) {
+                    const card = tableau[col][j];
+                    const highlight = selected && selected.col === col && selected.idx <= j;
+                    drawCard(card, x, rowY, highlight);
+                    rowY += card.faceUp ? OVERLAP_UP : OVERLAP_DOWN;
+                }
+                if (tableau[col].length === 0) {
+                    drawCard(null, x, y);
+                }
+            }
+
+            // Dragging
+            if (dragging) {
+                drawCard(dragging.card, mouseX - CARD_W / 2, mouseY - CARD_H / 2, true);
+            }
+
+            // Visual feedback
+            if (selected && selected.type === 'tableau') {
+                const {x, y} = getXY(selected.col);
+                let py = y;
+                for (let k = 0; k < selected.idx; k++) {
+                    py += tableau[selected.col][k].faceUp ? OVERLAP_UP : OVERLAP_DOWN;
+                }
+                ctx.strokeStyle = 'gold';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x, py, CARD_W, CARD_H);
+            }
+
+            lastDraw = Date.now();
+        }
+
+        let mouseX = 0, mouseY = 0;
+        let mouseStartX = 0, mouseStartY = 0;
+        canvas.addEventListener('mousemove', e => {
+            const r = canvas.getBoundingClientRect();
+            mouseX = e.clientX - r.left;
+            mouseY = e.clientY - r.top;
+            draw();
+        });
+
+        canvas.addEventListener('mousedown', handleStart);
+        canvas.addEventListener('touchstart', handleStart);
+        function handleStart(e) {
+            e.preventDefault();
+            const r = canvas.getBoundingClientRect();
+            mouseStartX = e.touches ? e.touches[0].clientX - r.left : e.clientX - r.left;
+            mouseStartY = e.touches ? e.touches[0].clientY - r.top : e.clientY - r.top;
+            selected = getCardAt(mouseStartX, mouseStartY);
+            if (selected && selected.card) {
+                dragging = {card: selected.card, ox: selected.x, oy: selected.y};
+            }
+            draw();
+        }
