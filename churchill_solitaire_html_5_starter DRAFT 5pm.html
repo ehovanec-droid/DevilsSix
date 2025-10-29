@@ -1,0 +1,532 @@
+<!--
+Project: Churchill Solitaire ("Devil's Six") — HTML5 Starter (Clean, fixed)
+Stack: Vanilla HTML/CSS/JS, no build tools, iPad Safari-friendly
+
+This revision fixes:
+• ReferenceError: tPile is not defined  → removed a stray code block and tightened helpers
+• Move-from-middle: you can drag any valid face-up substack (e.g., 10-9-8-7 or 8-7)
+• Deal reliability: handler hardened; rules unchanged (deal anytime; skip anchored King)
+• Visuals: brown table, darker navy backs, panel frames, top-left title
+• Z-order: tableau → foundations → reserve → stock → dragged stack
+• Self-tests expanded (no DOM dependence; do not modify live state)
+-->
+
+<!-- ───────────────────────────────── index.html ───────────────────────────────── -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Churchill Solitaire (HTML5 Starter)</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="ui">
+    <div class="row top">
+      <div class="left">
+        <button id="btnNew">New Game</button>
+        <button id="btnDeal">Deal</button>
+        <button id="btnUndo">Undo</button>
+      </div>
+      <div class="center">
+        <span id="status">Erik's Devil's Six — ready</span>
+      </div>
+      <div class="right">
+        <label class="toggle">
+          <input type="checkbox" id="cbPortrait" title="Force portrait layout (use if columns overflow)" /> Portrait
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="game" tabindex="0" aria-label="Churchill Solitaire canvas"></canvas>
+
+  <div id="winModal" class="modal hidden">
+    <div class="modal-body">
+      <h2>You Win!</h2>
+      <p>All cards to foundations. 🎉</p>
+      <button id="btnPlayAgain">Play again</button>
+    </div>
+  </div>
+
+  <div id="loseModal" class="modal hidden">
+    <div class="modal-body">
+      <h2>No Moves</h2>
+      <p>Stock is empty and no valid moves remain.</p>
+      <button id="btnRetry">New game</button>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
+
+<!-- ───────────────────────────────── style.css ───────────────────────────────── -->
+<style id="style.css">
+  :root {
+    --bg: #2f241b;      /* warm brown */
+    --ink: #f2eee8;     /* light text */
+    --muted: #c9c1ba;
+    --accent: #ffcc66;
+    --card: #ffffff;
+    --card-edge: #d7dee6;
+    --green-felt: #2f241b;
+  }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  #ui { position: fixed; inset: 0 0 auto 0; padding: 8px 12px; background: linear-gradient(180deg, rgba(0,0,0,.55), rgba(0,0,0,0)); z-index: 10; pointer-events: none; }
+  #ui .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; pointer-events: auto; }
+  #ui .row.top { height: 44px; }
+  #ui .left, #ui .center, #ui .right { display: flex; align-items: center; gap: 8px; }
+  button { background: #1f2937; color: var(--ink); border: 1px solid #2b3a4a; border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+  button:hover { filter: brightness(1.1); }
+  .toggle { user-select: none; color: var(--muted); font-size: 14px; }
+  #status { color: var(--muted); }
+
+  #game { position: fixed; inset: 0; outline: none; display: block; background: #3b2a1f; }
+
+  .modal { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,0.55); }
+  .hidden { display: none; }
+  .modal-body { background: #0f172a; color: var(--ink); border: 1px solid #2b3a4a; padding: 24px; border-radius: 16px; min-width: 260px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+  .modal-body h2 { margin-top: 0; }
+</style>
+
+<!-- ───────────────────────────────── game.js ───────────────────────────────── -->
+<script id="game.js">
+(() => {
+  // ======= Config =======
+  const RULES = {
+    name: "Erik's Devil's Six",
+    decks: 2,
+    tableauColumns: 10,
+    foundations: 8,
+    reserves: 6,  // Devil's Six count
+    card: { w: 96, h: 136, corner: 10, pad: 14, fanY: 26, scaleMin: 0.6 },
+    reserveFanX: 26, // horizontal fan spacing for Devil's Six (card units before scale)
+    feltInsets: { x: 24, y: 72 },
+  };
+
+  // ======= Canvas/setup =======
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+
+  const state = {
+    cards: [],
+    piles: {},
+    drag: null,
+    layout: { portrait: false, scale: 1 },
+    undo: [],
+    won: false,
+    lost: false,
+    pileHighlights: new Set(),
+    panels: {},
+  };
+
+  // ======= Utility =======
+  const SUITS = ['♠', '♥', '♦', '♣'];
+  const COLORS = { '♠': 'black', '♣': 'black', '♥': 'red', '♦': 'red' };
+  const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  function makeDeck(n=1) {
+    const cards = [];
+    for (let d=0; d<n; d++) {
+      for (const s of SUITS) for (const r of RANKS) cards.push({ id: `${d}-${s}-${r}-${Math.random().toString(36).slice(2,7)}`, s, r, faceUp: false, x:0, y:0, z:0, pile: null });
+    }
+    return cards;
+  }
+  function shuffle(a) { for (let i=a.length-1;i>0;i--){const j=(Math.random()* (i+1))|0; [a[i],a[j]]=[a[j],a[i]];} return a; }
+  const rankIndex = (r)=> RANKS.indexOf(r);
+  const isAltColor = (a,b)=> COLORS[a.s] !== COLORS[b.s];
+
+  // ======= Layout =======
+  function resize(){
+    const W = window.innerWidth, H = window.innerHeight;
+    canvas.width = Math.floor(W * DPR); canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W+"px"; canvas.style.height = H+"px";
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+
+    const cbPortrait = document.getElementById('cbPortrait');
+    state.layout.portrait = cbPortrait.checked || (H>W);
+
+    const { w, h, fanY, scaleMin } = RULES.card;
+    let scale = 1;
+    const cols = state.layout.portrait ? Math.ceil(RULES.tableauColumns/2) : RULES.tableauColumns;
+    const availableW = W - RULES.feltInsets.x*2;
+    const neededW = cols * w + (cols-1)*16;
+    scale = Math.min(1, availableW/neededW);
+    const availableH = H - RULES.feltInsets.y*2 - 80;
+    scale = Math.max(scaleMin, Math.min(scale, (h + 13*fanY)/availableH));
+    state.layout.scale = scale;
+  }
+
+  // ======= Drawing =======
+  function roundRect(x,y,w,h,r){
+    const rr = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr, y);
+    ctx.arcTo(x+w, y, x+w, y+h, rr);
+    ctx.arcTo(x+w, y+h, x, y+h, rr);
+    ctx.arcTo(x, y+h, x, y, rr);
+    ctx.arcTo(x, y, x+w, y, rr);
+    ctx.closePath();
+  }
+  function drawCard(c){
+    const { w, h, corner } = RULES.card;
+    const s = state.layout.scale; const x=c.x, y=c.y; ctx.save(); ctx.translate(x,y); ctx.scale(s,s);
+    roundRect(0,0,w,h,corner); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth=1.5; ctx.strokeStyle='#cfd8e3'; ctx.stroke();
+    if (c.faceUp){
+      const color = (COLORS[c.s] === 'red') ? '#d7263d' : '#111827';
+      ctx.fillStyle=color; ctx.font='bold 18px system-ui'; ctx.textBaseline='top';
+      ctx.fillText(c.r,8,8); ctx.fillText(c.s,8,28);
+      ctx.textAlign='right'; ctx.textBaseline='bottom'; ctx.fillText(c.r,w-8,h-8); ctx.fillText(c.s,w-8,h-28);
+    } else {
+      // darker navy back
+      roundRect(6,6,w-12,h-12,8); ctx.fillStyle='#081a3a'; ctx.fill(); ctx.globalAlpha=.22; ctx.fillStyle='#e9f0ff';
+      for (let yy=12; yy<h-12; yy+=12) for (let xx=12; xx<w-12; xx+=24) ctx.fillRect(xx,yy,12,6); ctx.globalAlpha=1;
+    }
+    ctx.restore();
+  }
+
+  function render(){
+    const W = canvas.clientWidth, H=canvas.clientHeight; ctx.clearRect(0,0,W,H);
+
+    // Header text
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.font = '700 18px system-ui';
+    ctx.textBaseline = 'top';
+    ctx.fillText("Erik's Devil's Six", RULES.feltInsets.x, RULES.feltInsets.y - 4);
+    ctx.restore();
+
+    // Panel frames (left: stock+reserve, right: foundations grid)
+    const stroke = 'rgba(255,255,255,0.14)';
+    const fill = 'rgba(0,0,0,0.10)';
+    for (const key of ['left','right']){
+      const p = state.panels?.[key]; if (!p) continue;
+      ctx.save(); ctx.fillStyle = fill; ctx.strokeStyle = stroke; ctx.lineWidth = 2;
+      roundRect(p.x, p.y, p.w, p.h, 12); ctx.fill(); ctx.stroke(); ctx.restore();
+    }
+
+    // Guides + target glow
+    for (const [key,p] of Object.entries(state.piles)){
+      const { w,h,corner } = RULES.card; const s=state.layout.scale;
+      ctx.globalAlpha=.10; ctx.fillStyle='#e9eef6'; roundRect(p.x,p.y,w*s,h*s,corner*s); ctx.fill();
+      if (state.pileHighlights.has(key)){ ctx.globalAlpha=.9; ctx.lineWidth=4; ctx.strokeStyle='#6aa7ff'; roundRect(p.x-2,p.y-2,w*s+4,h*s+4,corner*s+2); ctx.stroke(); }
+    }
+    ctx.globalAlpha=1;
+
+    // Determine dragged set so we don't double-draw
+    const dragging = new Set((state.drag?.cards||[]).map(c=>c.id));
+
+    // Draw order: tableau first, then foundations, then reserve + stock, then dragged stack last
+    drawPileType('tableau', dragging);
+    drawPileType('foundation', dragging);
+    drawPileType('reserve', dragging);
+    drawPileType('stock', dragging);
+
+    if (state.drag?.cards) for (const c of state.drag.cards) drawCard(c);
+  }
+
+  function drawPileType(type, draggingSet){
+    // Within a pile, draw bottom → top so top face-up appears above facedowns
+    for (const [key,p] of Object.entries(state.piles)){
+      if (p.type !== type) continue;
+      for (let i=0;i<p.cards.length;i++){
+        const c=p.cards[i]; if (draggingSet.has(c.id)) continue; drawCard(c);
+      }
+    }
+  }
+
+  // ======= Hit helpers =======
+  function hitCard(px,py){
+    // order: dragged (top), reserve/stock, foundations, tableau
+    const pilesOrder = ['reserve','stock','foundation','tableau'];
+    const s=state.layout.scale; const { w,h } = RULES.card;
+    if (state.drag?.cards){
+      for (let i=state.drag.cards.length-1;i>=0;i--){
+        const c=state.drag.cards[i]; const rx=px-c.x, ry=py-c.y; if (rx>=0&&ry>=0&&rx<=w*s&&ry<=h*s) return c;
+      }
+    }
+    for (const type of pilesOrder){
+      for (const p of Object.values(state.piles)){
+        if (p.type!==type) continue;
+        for (let i=p.cards.length-1;i>=0;i--){
+          const c=p.cards[i]; const rx=px-c.x, ry=py-c.y; if (rx>=0&&ry>=0&&rx<=w*s&&ry<=h*s) return c;
+        }
+      }
+    }
+    return null;
+  }
+  function hitPile(px,py){ const s=state.layout.scale; const {w,h}=RULES.card; for (const [k,p] of Object.entries(state.piles)){ if (px>=p.x&&py>=p.y&&px<=p.x+w*s&&py<=p.y+h*s) return p;} return null; }
+  function pileKey(p){ for (const [k,v] of Object.entries(state.piles)) if (v===p) return k; return null; }
+
+  // ======= Input =======
+  canvas.addEventListener('pointerdown', onDown, {passive:false});
+  canvas.addEventListener('pointermove', onMove, {passive:false});
+  canvas.addEventListener('pointerup', onUp, {passive:false});
+  canvas.addEventListener('pointercancel', onUp, {passive:false});
+
+  // Click stock to deal
+  canvas.addEventListener('pointerdown', (e)=>{
+    const p=getPoint(e); const card=hitCard(p.x,p.y); if (card) return; const pile=hitPile(p.x,p.y); if (pile && pile.type==='stock') onDeal();
+  }, {passive:false});
+
+  function getPoint(e){ const r=canvas.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+
+  function onDown(e){ e.preventDefault(); canvas.setPointerCapture(e.pointerId);
+    const p=getPoint(e); const c=hitCard(p.x,p.y); if (!c) return; const pile=c.pile; if (!pile) return;
+
+    // decide single vs run by where you grab the card
+    const s=state.layout.scale; const { h }=RULES.card; const localY=(p.y - c.y)/s; const wantRun = localY > h*0.6;
+
+    if (pile.type==='reserve') { if (!c.faceUp) return; if (c!==topOfReserve()) return; startDrag([c],p.x,p.y); return; }
+
+    if (pile.type==='tableau') {
+      if (!c.faceUp) return;
+      const idx = pile.cards.indexOf(c);
+      const runFromIdx = buildRunFromIndex(pile, idx);
+      if (wantRun && runFromIdx.length>1){ startDrag(runFromIdx, p.x, p.y); return; }
+      startDrag([c], p.x, p.y); return;
+    }
+  }
+  function startDrag(cards, px,py){ state.drag={cards,dx:px-cards[0].x,dy:py-cards[0].y}; updateHighlightsForDrag(cards); }
+  function onMove(e){ if (!state.drag) return; const p=getPoint(e); const {dx,dy,cards}=state.drag; const ox=p.x-dx, oy=p.y-dy; const fanY=RULES.card.fanY*state.layout.scale; cards.forEach((m,i)=>{ m.x=ox + (m.pile?.type==='reserve'? i*RULES.reserveFanX*state.layout.scale : 0); m.y=oy + (m.pile?.type==='reserve'? 0 : i*fanY);}); }
+  function onUp(e){ if (!state.drag) return; const p=getPoint(e); const drag=state.drag; const moved=Math.hypot((drag.cards[0].x+drag.dx)-p.x,(drag.cards[0].y+drag.dy)-p.y); const wasAceTap=(drag.cards.length===1 && drag.cards[0].r==='A' && moved<8);
+    const snap=bestDropTarget(drag.cards,p.x,p.y); state.pileHighlights.clear();
+    if (!snap && wasAceTap){ const c=drag.cards[0]; const f=foundationTargetsFor(c); if (f.length){ performMove([c], f[0]); checkAutoAces(); checkEndStates(); state.drag=null; return; } }
+    if (snap){ performMove(drag.cards, snap.pile); checkAutoAces(); checkEndStates(); } else { snapBack(drag.cards); }
+    state.drag=null;
+  }
+
+  // ======= Rules helpers =======
+  function isDescendingAltColor(run){ for (let i=0;i<run.length-1;i++){ const a=run[i], b=run[i+1]; if (!(a.faceUp&&b.faceUp)) return false; if (!isAltColor(a,b)) return false; if (rankIndex(a.r)!==rankIndex(b.r)+1) return false; } return true; }
+  function buildRunFromTop(tPile){ const out=[]; for (let i=tPile.cards.length-1;i>=0;i--){ const c=tPile.cards[i]; if (!c.faceUp) break; if (!out.length) {out.push(c); continue;} const prev=out[out.length-1]; if (isAltColor(prev,c) && rankIndex(prev.r)===rankIndex(c.r)+1) out.push(c); else break; } return out; }
+  function buildRunFromIndex(tPile, startIdx){
+    // Build a descending, alt-color run starting at a specific face-up card
+    const out=[];
+    for (let i=startIdx;i<tPile.cards.length;i++){
+      const c=tPile.cards[i];
+      if (!c.faceUp){ out.length=0; break; }
+      if (!out.length){ out.push(c); continue; }
+      const prev=out[out.length-1];
+      if (isAltColor(prev,c) && rankIndex(prev.r)===rankIndex(c.r)+1) out.push(c);
+      else { out.length=0; break; }
+    }
+    return out;
+  }
+  function topOfReserve(){ const r=state.piles['R']; return r.cards[r.cards.length-1] || null; }
+
+  function foundationTargetsFor(card){ const targets=[]; for (const p of Object.values(state.piles)) if (p.type==='foundation') if (canPlaceOnFoundation(card,p)) targets.push(p); return targets; }
+  function updateHighlightsForDrag(cards){ state.pileHighlights.clear(); const targets=legalTargetsFor(cards); for (const t of targets) state.pileHighlights.add(pileKey(t.pile)); }
+
+  function bestDropTarget(cards, px,py){ const targets=legalTargetsFor(cards); if (!targets.length) return null; let best=null, bestD=Infinity; for (const t of targets){ const cx=t.pile.x + (RULES.card.w*state.layout.scale)/2; const cy=t.pile.y + (RULES.card.h*state.layout.scale)/2; const d=Math.hypot(px-cx, py-cy); if (d<bestD){best=t; bestD=d;} } return best; }
+
+  function legalTargetsFor(cards){
+    const srcPile=cards[0].pile; const head=cards[0]; const out=[];
+    if (srcPile.type==='reserve'){
+      for (const p of Object.values(state.piles)) if (p.type==='foundation') if (canPlaceOnFoundation(head,p)) out.push({pile:p});
+      return out;
+    }
+    if (srcPile.type==='tableau'){
+      if (cards.length===1){ for (const p of Object.values(state.piles)) if (p.type==='foundation') if (canPlaceOnFoundation(head,p)) out.push({pile:p}); }
+      for (let i=0;i<RULES.tableauColumns;i++){ const p=state.piles[`T${i}`]; if (p===srcPile) continue; if (canPlaceOnTableau(cards,p)) out.push({pile:p}); }
+      return out;
+    }
+    return out;
+  }
+  function canPlaceOnFoundation(card, fPile){ if (fPile.type!=='foundation') return false; if (!fPile.cards.length) return card.r==='A'; const top=fPile.cards[fPile.cards.length-1]; return card.s===top.s && rankIndex(card.r)===rankIndex(top.r)+1; }
+  function canPlaceOnTableau(run, tPile){ if (tPile.type!=='tableau') return false; const head=run[0]; if (!tPile.cards.length) return head.r==='K'; const top=tPile.cards[tPile.cards.length-1]; if (!top.faceUp) return false; return isAltColor(top,head) && rankIndex(top.r)===rankIndex(head.r)+1; }
+
+  // ======= Positioning & animations =======
+  function pileIndexOffset(pile, idx){
+    const s=state.layout.scale; const fanY=RULES.card.fanY*s; const fanX=RULES.reserveFanX*s;
+    if (pile.type==='reserve') return {dx: idx*fanX, dy: 0};
+    if (pile.type==='tableau') return {dx: 0, dy: idx*fanY};
+    return {dx:0, dy:0};
+  }
+
+  function animateTo(cards, dstPile, baseIndex, ms=200, cb){
+    const start=performance.now();
+    const from=cards.map(c=>({x:c.x,y:c.y}));
+    const step=(now)=>{
+      const t=Math.min(1,(now-start)/ms);
+      cards.forEach((c,i)=>{
+        const off=pileIndexOffset(dstPile, baseIndex+i);
+        const tx=dstPile.x + off.dx, ty=dstPile.y + off.dy;
+        c.x = from[i].x + (tx-from[i].x)*t;
+        c.y = from[i].y + (ty-from[i].y)*t;
+      });
+      if (t<1) requestAnimationFrame(step); else cb&&cb();
+    };
+    requestAnimationFrame(step);
+  }
+
+  function snapBack(cards){ const p=cards[0].pile; if (!p) return; const startIdx = p.cards.indexOf(cards[0]); animateTo(cards, p, startIdx, 160); }
+
+  // ======= Piles & deal =======
+  function layoutPiles(){
+    state.piles = {}; state.panels = {};
+    const s = state.layout.scale; const { w, h } = RULES.card; const pad = 16; const left = RULES.feltInsets.x; const top = RULES.feltInsets.y + 48;
+    const W = canvas.clientWidth;
+
+    // Foundations: 2 rows × 4 columns on the right side
+    const fCols = 4;
+    const totalFW = fCols*(w*s) + (fCols-1)*pad;
+    const rightStart = Math.max(left + 420, W - totalFW - left);
+    const fY1 = top;
+    const fY2 = top + h*s + 16;
+    for (let i=0;i<8;i++){
+      const row = (i<4)?0:1; const col = (i%4);
+      const fx = rightStart + col*(w*s + pad);
+      const fy = row===0? fY1 : fY2;
+      state.piles[`F${i}`] = { type:'foundation', x: fx, y: fy, cards: [] };
+    }
+    // Right panel bounds encasing foundations grid
+    state.panels.right = { x: rightStart - 12, y: fY1 - 12, w: totalFW + 24, h: (h*s)*2 + 16 + 24 };
+
+    // Left top panel: stock then reserve fan to its right
+    const rY = fY1; // align top rows visually
+    const stockX = left;
+    state.piles['STOCK'] = { type:'stock', x: stockX, y: rY, cards: [] };
+    state.piles['R'] = { type:'reserve', x: stockX + (w*s + pad)*1.2, y: rY, cards: [] };
+
+    // Left panel bounds around stock + reserve fan
+    const fanWidth = (w*s) + (RULES.reserves-1)*(RULES.reserveFanX*s);
+    const leftPanelW = (w*s) + pad + fanWidth + 24;
+    state.panels.left = { x: stockX - 12, y: rY - 12, w: leftPanelW, h: (h*s) + 24 };
+
+    // Tableau along a single row lower
+    const tY = fY2 + h*s + 44;
+    let x = left;
+    for (let i=0;i<RULES.tableauColumns;i++){
+      state.piles[`T${i}`] = { type:'tableau', x, y: tY, cards: [] };
+      x += (w*s + pad);
+    }
+  }
+
+  function newGame(){
+    document.getElementById('status').textContent = `${RULES.name}`;
+    state.won=false; state.lost=false; hideWin(); hideLose(); state.undo=[];
+    state.cards = shuffle(makeDeck(RULES.decks));
+    layoutPiles();
+    const stock=state.piles['STOCK']; const s=state.layout.scale; const {fanY}=RULES.card; const baseX=stock.x, baseY=stock.y;
+    state.cards.forEach((c,i)=>{ c.faceUp=false; c.pile=stock; c.z=i; c.x=baseX; c.y=baseY + Math.min(i,4)*(fanY*s*0.15); stock.cards.push(c); });
+    dealDevilsSix();
+    dealTableauInitial();
+    checkAutoAces();
+  }
+
+  function dealFromStockToPile(dst, faceUp=true, recordUndo=false){ const stock=state.piles['STOCK']; if (!stock.cards.length) return null; const c=stock.cards.pop(); c.pile=dst; c.faceUp=!!faceUp; c.x=stock.x; c.y=stock.y; dst.cards.push(c); const baseIndex=dst.cards.length-1; animateTo([c], dst, baseIndex, 200); if (recordUndo) state.undo.push({type:'dealOne', dstKey:pileKey(dst), cardId:c.id}); return c; }
+
+  function dealDevilsSix(){ const r=state.piles['R']; for (let i=0;i<RULES.reserves;i++) dealFromStockToPile(r, true); }
+
+  function dealTableauInitial(){ const pattern=[0,1,2,3,4,4,3,2,1,0]; for (let i=0;i<10;i++){ const t=state.piles[`T${i}`]; const downs=pattern[i]; for (let d=0; d<downs; d++) dealFromStockToPile(t,false); dealFromStockToPile(t,true); } }
+
+  function hasAnyFaceDown(tPile){ return tPile.cards.some(c=>!c.faceUp); }
+
+  function onDeal(){
+    const stock=state.piles['STOCK']; if (!stock.cards.length) return; const batch=[];
+    for (let i=0;i<RULES.tableauColumns;i++){
+      const t=state.piles[`T${i}`]; const top=t.cards[t.cards.length-1]; const skip = top && top.faceUp && top.r==='K' && !hasAnyFaceDown(t);
+      if (skip) continue; const dealt=dealFromStockToPile(t,true,true); if (dealt) batch.push({dstKey:pileKey(t), cardId:dealt.id});
+    }
+    if (batch.length) state.undo.push({type:'dealBatch', items:batch});
+    checkAutoAces(); checkEndStates();
+  }
+
+  // ======= Move/auto/undo =======
+  function performMove(cards, dstPile, recordUndo=true){
+    const srcPile=cards[0].pile; const srcKey=pileKey(srcPile), dstKey=pileKey(dstPile);
+    const startIdx=srcPile.cards.indexOf(cards[0]); srcPile.cards.splice(startIdx, cards.length);
+    for (const c of cards){ c.pile=dstPile; dstPile.cards.push(c); }
+    const baseIndex=dstPile.cards.length - cards.length; animateTo(cards, dstPile, baseIndex, 160);
+    const reveal=srcPile.cards[srcPile.cards.length-1]; let flippedId=null; if (reveal && !reveal.faceUp && srcPile.type==='tableau'){ reveal.faceUp=true; flippedId=reveal.id; }
+    if (recordUndo) state.undo.push({type:'move', cardIds:cards.map(c=>c.id), srcKey, dstKey, dstCount:cards.length, flippedId});
+  }
+
+  function foundationAutoFrom(list){ const empties=Object.values(state.piles).filter(p=>p.type==='foundation' && !p.cards.length); if (!empties.length) return false; for (const c of list){ if (c && c.r==='A'){ performMove([c], empties[0]); return true; } } return false; }
+  function checkAutoAces(){ let moved=true; while(moved){ moved=false; const tops=[]; for(let i=0;i<RULES.tableauColumns;i++){ const t=state.piles[`T${i}`]; const top=t.cards[t.cards.length-1]; if (top && top.faceUp) tops.push(top); } const rTop=topOfReserve(); if (rTop) tops.push(rTop); if (foundationAutoFrom(tops)) moved=true; } checkWin(); }
+
+  function undoLast(){ const step=state.undo.pop(); if (!step) return; switch(step.type){
+      case 'move': { const dst=state.piles[step.dstKey], src=state.piles[step.srcKey]; const moving=dst.cards.splice(dst.cards.length - step.dstCount, step.dstCount); moving.forEach(c=>{ c.pile=src; src.cards.push(c); }); if (step.flippedId){ const f=state.cards.find(c=>c.id===step.flippedId); if (f) f.faceUp=false; } break; }
+      case 'dealOne': { const dst=state.piles[step.dstKey]; if (dst.cards.length){ const c=dst.cards.pop(); c.pile=state.piles['STOCK']; c.faceUp=false; state.piles['STOCK'].cards.push(c); } break; }
+      case 'dealBatch': { for (let i=step.items.length-1; i>=0; i--){ const it=step.items[i]; const dst=state.piles[it.dstKey]; if (dst.cards.length){ const c=dst.cards.pop(); c.pile=state.piles['STOCK']; c.faceUp=false; state.piles['STOCK'].cards.push(c); } } break; }
+    }
+    render();
+  }
+
+  // ======= Win/Lose =======
+  function checkWin(){ const total=Object.values(state.piles).filter(p=>p.type==='foundation').reduce((a,p)=>a+p.cards.length,0); if (total===104 && !state.won){ state.won=true; showWin(); } }
+  function checkLose(){ if (state.won) return false; const stock=state.piles['STOCK']; if (stock.cards.length>0) return false; if (hasAnyValidMove()) return false; state.lost=true; showLose(); return true; }
+  function hasAnyValidMove(){ // simple search
+    for (let i=0;i<RULES.tableauColumns;i++){
+      const t=state.piles[`T${i}`]; const top=t.cards[t.cards.length-1]; if (top && top.faceUp){ for (const p of Object.values(state.piles)) if (p.type==='foundation' && canPlaceOnFoundation(top,p)) return true; }
+      for (let j=0;j<t.cards.length;j++){ const run=t.cards.slice(j); if (!run.length || !run[0].faceUp) continue; if (!isDescendingAltColor(run)) continue; for (let k=0;k<RULES.tableauColumns;k++) if (k!==i){ const dest=state.piles[`T${k}`]; if (canPlaceOnTableau(run,dest)) return true; }
+      }
+    }
+    const rTop=topOfReserve(); if (rTop){ for (const p of Object.values(state.piles)) if (p.type==='foundation' && canPlaceOnFoundation(rTop,p)) return true; }
+    return false;
+  }
+  function showWin(){ document.getElementById('winModal').classList.remove('hidden'); }
+  function hideWin(){ document.getElementById('winModal').classList.add('hidden'); }
+  function showLose(){ document.getElementById('loseModal').classList.remove('hidden'); }
+  function hideLose(){ document.getElementById('loseModal').classList.add('hidden'); }
+  function checkEndStates(){ checkWin(); checkLose(); }
+
+  // ======= Wire & loop =======
+  document.getElementById('btnNew').addEventListener('click', ()=>{ resize(); newGame(); });
+  document.getElementById('btnDeal').addEventListener('click', (e)=>{ try{ onDeal(); }catch(err){ console.error('Deal error:', err); } });
+  document.getElementById('btnUndo').addEventListener('click', undoLast);
+  document.getElementById('btnPlayAgain').addEventListener('click', ()=>{ hideWin(); resize(); newGame(); });
+  document.getElementById('btnRetry')?.addEventListener('click', ()=>{ hideLose(); resize(); newGame(); });
+  document.getElementById('cbPortrait').addEventListener('change', ()=>{ resize(); render(); });
+  window.addEventListener('resize', ()=>resize());
+  window.addEventListener('orientationchange', ()=>setTimeout(resize,200));
+
+  function tick(){ render(); requestAnimationFrame(tick); }
+
+  // ======= Self-tests (basic, non-destructive) =======
+  function runSelfTests(){
+    // Initial layout counts
+    const pattern=[0,1,2,3,4,4,3,2,1,0];
+    const reserve=state.piles['R'];
+    console.assert(reserve.cards.length===6, 'Devil\'s Six should have 6 cards');
+    let tableauTotal=0; let ups=0, downs=0;
+    for (let i=0;i<10;i++){ const t=state.piles[`T${i}`]; tableauTotal += t.cards.length; downs += pattern[i]; const top=t.cards[t.cards.length-1]; if (top && top.faceUp) ups++; }
+    console.assert(tableauTotal===30, 'Tableau should contain 30 cards (20 down + 10 up)');
+    console.assert(ups===10, 'Each tableau column should end with 1 face-up card');
+    console.assert(downs===20, 'There should be 20 face-down cards in tableau');
+
+    // Pure-function tests for run building (synthetic pile; doesn\'t touch live state)
+    const synth = { cards: [
+      {r:'10', s:'♠', faceUp:true},
+      {r:'9',  s:'♥', faceUp:true},
+      {r:'8',  s:'♠', faceUp:true},
+      {r:'7',  s:'♥', faceUp:true},
+    ]};
+    let run = buildRunFromIndex(synth, 0); console.assert(run.length===4, 'buildRunFromIndex should pick full 10-9-8-7');
+    run = buildRunFromIndex(synth, 2); console.assert(run.length===2 && run[0].r==='8', 'buildRunFromIndex should pick 8-7 from middle');
+
+    const bad = { cards: [
+      {r:'10', s:'♠', faceUp:true},
+      {r:'9',  s:'♠', faceUp:true}, // same color → invalid chain breaks
+      {r:'8',  s:'♠', faceUp:true},
+    ]};
+    run = buildRunFromIndex(bad, 0); console.assert(run.length===0, 'Invalid color sequence should yield empty run');
+
+    // Foundation rule sanity (pure)
+    const f = { type:'foundation', cards: [] };
+    console.assert(canPlaceOnFoundation({r:'A', s:'♣'}, f)===true, 'Ace should start empty foundation');
+    f.cards.push({r:'A', s:'♣'});
+    console.assert(canPlaceOnFoundation({r:'2', s:'♣'}, f)===true, '2♣ should follow A♣');
+    console.assert(canPlaceOnFoundation({r:'2', s:'♦'}, f)===false, 'Wrong suit should be rejected');
+  }
+
+  // ======= Boot =======
+  resize();
+  newGame();
+  runSelfTests();
+  requestAnimationFrame(tick);
+})();
+</script>
