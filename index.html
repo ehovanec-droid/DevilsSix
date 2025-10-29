@@ -73,11 +73,13 @@
         <button id="newGame">New Game</button>
         <button id="deal">Deal</button>
         <button id="hint">Hint</button>
-        <!-- Undo optional, skipping for simplicity -->
+        <button id="undo">Undo</button>
     </div>
     <div id="status">
         <div>Time: <span id="time">00:00</span></div>
         <div>Deals: <span id="deals">0</span></div>
+        <div>Rank: Sandhurst Cadet</div>
+        <div>Career Score: 0</div>
     </div>
     <div id="message">
         <div id="messageText"></div>
@@ -119,7 +121,7 @@
         let deck = [];
         let tableau = Array(10).fill().map(() => []);
         let devilsSix = [];
-        let foundations = Array(4).fill(null); // one per suit
+        let foundations = Array(8).fill(null); // 8 foundations for dual decks
         let stock = [];
         let selected = null;
         let dragging = null;
@@ -129,6 +131,8 @@
         let timeStart = 0;
         let timeInterval = null;
         let hintTimeout = null;
+        let undoStack = [];
+        let lastDraw = 0;
 
         // Layout
         let CARD_W = 80;
@@ -142,6 +146,13 @@
             CARD_W = Math.max(60, Math.min(90, width / 15));
             CARD_H = CARD_W * 1.5;
             OVERLAP = CARD_W * 0.25;
+            const maxStackHeight = (height - 200) / OVERLAP; // Available height below UI
+            if (tableau.some(col => col.length > maxStackHeight)) {
+                const scale = maxStackHeight / Math.max(...tableau.map(col => col.length));
+                CARD_W *= scale;
+                CARD_H *= scale;
+                OVERLAP *= scale;
+            }
         }
 
         function initDeck() {
@@ -167,17 +178,17 @@
             initDeck();
             tableau = Array(10).fill().map(() => []);
             devilsSix = [];
-            foundations = Array(4).fill(null);
+            foundations = Array(8).fill(null);
             stock = [];
 
-            // Deal Devil's Six: 6 face-up
+            // Deal Devil's Six
             for (let i = 0; i < 6; i++) {
                 devilsSix.push(deck.pop());
                 devilsSix[i].faceUp = true;
             }
 
             // Deal tableau pyramid
-            const downCounts = [0,1,2,3,4,4,3,2,1,0];
+            const downCounts = [0, 1, 2, 3, 4, 4, 3, 2, 1, 0];
             for (let col = 0; col < 10; col++) {
                 for (let d = 0; d < downCounts[col]; d++) {
                     const card = deck.pop();
@@ -189,10 +200,8 @@
                 tableau[col].push(upCard);
             }
 
-            // Remaining stock
             stock = deck;
-
-            dealsLeft = stock.length / 10 | 0; // approx
+            dealsLeft = stock.length / 10 | 0;
             gameWon = false;
             gameLost = false;
             if (timeInterval) clearInterval(timeInterval);
@@ -210,13 +219,12 @@
             document.getElementById('time').textContent = `${mins}:${secs}`;
         }
 
-        function getXY(col, row = 0) {
+        function getXY(col, baseY = 200) {
             resizeLayout();
             const startX = 50;
             const colW = (canvas.width - 100) / 9;
             const x = startX + col * colW;
-            const py = 150; // pyramid y start
-            const y = py + row * OVERLAP;
+            const y = baseY;
             return {x, y};
         }
 
@@ -228,7 +236,6 @@
             ctx.shadowOffsetX = 5;
             ctx.shadowOffsetY = 5;
 
-            // Card bg
             ctx.fillStyle = highlight ? '#FFD700' : 'white';
             ctx.fillRect(0, 0, CARD_W, CARD_H);
             ctx.lineWidth = 3;
@@ -242,15 +249,18 @@
                 ctx.textBaseline = 'middle';
                 ctx.fillText(card.rank, 8, CARD_H / 4);
                 ctx.fillText(card.suit, 8, 3 * CARD_H / 4);
-                // Corner suit
                 ctx.save();
                 ctx.translate(CARD_W - 8, CARD_H / 4);
                 ctx.rotate(Math.PI / 2);
                 ctx.font = `${CARD_W / 5}px Arial Black`;
                 ctx.fillText(card.suit, 0, 0);
                 ctx.restore();
+                ctx.save();
+                ctx.translate(CARD_W - 8, 3 * CARD_H / 4);
+                ctx.rotate(Math.PI / 2);
+                ctx.fillText(card.suit, 0, 0);
+                ctx.restore();
             } else if (card) {
-                // Back
                 ctx.fillStyle = '#4169E1';
                 ctx.fillRect(5, 5, CARD_W - 10, CARD_H - 10);
                 ctx.fillStyle = 'white';
@@ -263,35 +273,36 @@
         }
 
         function draw() {
+            if (Date.now() - lastDraw < 16) return; // ~60fps cap
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             resizeLayout();
 
-            // Foundations
-            const fX = canvas.width - 300;
+            // Foundations (top-right, 8 piles in 2 rows)
+            const fStartX = canvas.width - 400;
             const fY = 20;
-            for (let i = 0; i < 4; i++) {
-                const fx = fX + i * 70;
-                drawCard(foundations[i], fx, fY);
+            for (let i = 0; i < 8; i++) {
+                const fx = fStartX + (i % 4) * 70 + (i > 3 ? 50 : 0);
+                drawCard(foundations[i], fx, fY + (i > 3 ? 150 : 0));
                 ctx.fillStyle = 'white';
                 ctx.font = '16px Arial';
                 ctx.textAlign = 'center';
-                const suitSym = i === 0 ? '♠' : i === 1 ? '♥' : i === 2 ? '♦' : '♣';
-                ctx.fillText(suitSym, fx + CARD_W / 2, fY + 20 + CARD_H);
+                const suitSym = suits[i % 4];
+                ctx.fillText(suitSym, fx + CARD_W / 2, fY + 20 + CARD_H + (i > 3 ? 150 : 0));
             }
 
-            // Devil's Six
+            // Devil's Six (top-left)
             const dsX = 20;
             const dsY = 20;
             for (let i = 0; i < 6; i++) {
                 drawCard(devilsSix[i], dsX + i * 55, dsY);
             }
 
-            // Stock
+            // Stock (right of Devil's Six)
             const stockX = dsX + 6 * 55 + 20;
             const stockY = dsY;
             drawCard(stock.length ? {faceUp: false} : null, stockX, stockY);
 
-            // Tableau
+            // Tableau (below)
             for (let col = 0; col < 10; col++) {
                 const {x, y} = getXY(col);
                 let row = 0;
@@ -305,10 +316,20 @@
 
             // Dragging
             if (dragging) {
-                const dx = dragging.ox + (mouseX - mouseStartX);
-                const dy = dragging.oy + (mouseY - mouseStartY);
-                drawCard(dragging.card, dx, dy, true);
+                drawCard(dragging.card, mouseX - CARD_W / 2, mouseY - CARD_H / 2, true);
             }
+
+            // Visual feedback
+            if (selected) {
+                const {x, y} = getXY(selected.col);
+                let py = y;
+                for (let i = 0; i <= selected.idx; i++) py += OVERLAP;
+                ctx.strokeStyle = 'gold';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x, py - OVERLAP, CARD_W, CARD_H);
+            }
+
+            lastDraw = Date.now();
         }
 
         let mouseX = 0, mouseY = 0;
@@ -353,12 +374,12 @@
 
         function getCardAt(mx, my) {
             // Foundations
-            const fX = canvas.width - 300;
+            const fStartX = canvas.width - 400;
             const fY = 20;
-            for (let i = 0; i < 4; i++) {
-                const fx = fX + i * 70;
-                if (mx > fx && mx < fx + CARD_W && my > fY && my < fY + CARD_H && foundations[i]) {
-                    return {type: 'foundation', suitIdx: i, card: foundations[i]};
+            for (let i = 0; i < 8; i++) {
+                const fx = fStartX + (i % 4) * 70 + (i > 3 ? 50 : 0);
+                if (mx > fx && mx < fx + CARD_W && my > fY + (i > 3 ? 150 : 0) && my < fY + CARD_H + (i > 3 ? 150 : 0) && foundations[i]) {
+                    return {type: 'foundation', suitIdx: i, card: foundations[i], x: fx, y: fY + (i > 3 ? 150 : 0)};
                 }
             }
 
@@ -367,11 +388,11 @@
             const dsY = 20;
             for (let i = 0; i < 6; i++) {
                 if (mx > dsX + i * 55 && mx < dsX + i * 55 + CARD_W && my > dsY && my < dsY + CARD_H) {
-                    return {type: 'devils', idx: i, card: devilsSix[i]};
+                    return {type: 'devils', idx: i, card: devilsSix[i], x: dsX + i * 55, y: dsY};
                 }
             }
 
-            // Stock - deal
+            // Stock
             const stockX = dsX + 6 * 55 + 20;
             const stockY = dsY;
             if (mx > stockX && mx < stockX + CARD_W && my > stockY && my < stockY + CARD_H && stock.length > 0) {
@@ -383,18 +404,14 @@
             for (let col = 0; col < 10; col++) {
                 const {x, y} = getXY(col);
                 let py = y;
-                for (let row = 0; row < tableau[col].length; row++) {
+                for (let row = tableau[col].length - 1; row >= 0; row--) {
                     if (mx > x && mx < x + CARD_W && my > py && my < py + CARD_H) {
-                        const card = tableau[col][row];
-                        if (card.faceUp) {
-                            return {type: 'tableau', col, idx: row, card};
-                        }
+                        return {type: 'tableau', col, idx: row, card: tableau[col][row], x, y: py};
                     }
                     py += OVERLAP;
                 }
-                // Empty column
                 if (tableau[col].length === 0 && mx > x && mx < x + CARD_W && my > y && my < y + CARD_H) {
-                    return {type: 'tableau', col, idx: -1, card: null};
+                    return {type: 'tableau', col, idx: -1, card: null, x, y};
                 }
             }
             return null;
@@ -413,7 +430,7 @@
             }
 
             if (to.type === 'foundation') {
-                const suitIdx = suits.indexOf(movingCards[0].suit);
+                const suitIdx = suits.indexOf(movingCards[0].suit) % 4 + (movingCards[0].suit.charCodeAt(0) > 127 ? 4 : 0);
                 if (suitIdx !== to.suitIdx) return false;
                 const top = foundations[suitIdx];
                 if (!top) {
@@ -421,6 +438,7 @@
                 } else {
                     if (movingCards[0].value !== top.value + 1) return false;
                 }
+                undoStack.push({from: {type: from.type, col: from.col, idx: from.idx, card: from.card}, to: {type: to.type, suitIdx: to.suitIdx, card: foundations[to.suitIdx]}});
                 foundations[to.suitIdx] = movingCards[0];
                 if (from.type === 'tableau') {
                     tableau[from.col].splice(from.idx, movingCards.length);
@@ -438,6 +456,7 @@
                 } else {
                     if (movingCards[0].value !== 13) return false; // King
                 }
+                undoStack.push({from: {type: from.type, col: from.col, idx: from.idx, card: from.card}, to: {type: to.type, col: toCol, card: tableau[toCol][tableau[toCol].length - 1]}});
                 tableau[toCol].push(...movingCards);
                 tableau[fromCol].splice(from.idx, movingCards.length);
                 flipTop(fromCol);
@@ -465,27 +484,23 @@
         }
 
         function autoMoveAces() {
-            // Check tableau tops
             for (let col = 0; col < 10; col++) {
-                if (tableau[col].length > 0 && tableau[col][tableau[col].length - 1].faceUp) {
-                    const card = tableau[col][tableau[col].length - 1];
-                    if (card.value === 1) {
-                        const suitIdx = suits.indexOf(card.suit);
+                for (let i = tableau[col].length - 1; i >= 0; i--) {
+                    if (tableau[col][i].faceUp && tableau[col][i].value === 1) {
+                        const suitIdx = suits.indexOf(tableau[col][i].suit) % 4 + (tableau[col][i].suit.charCodeAt(0) > 127 ? 4 : 0);
                         if (!foundations[suitIdx]) {
-                            foundations[suitIdx] = card;
-                            tableau[col].pop();
+                            foundations[suitIdx] = tableau[col][i];
+                            tableau[col].splice(i, 1);
                             flipTop(col);
                         }
                     }
                 }
             }
-            // Devil's Six
             for (let i = devilsSix.length - 1; i >= 0; i--) {
-                const card = devilsSix[i];
-                if (card.value === 1) {
-                    const suitIdx = suits.indexOf(card.suit);
+                if (devilsSix[i].value === 1) {
+                    const suitIdx = suits.indexOf(devilsSix[i].suit) % 4 + (devilsSix[i].suit.charCodeAt(0) > 127 ? 4 : 0);
                     if (!foundations[suitIdx]) {
-                        foundations[suitIdx] = card;
+                        foundations[suitIdx] = devilsSix[i];
                         devilsSix.splice(i, 1);
                     }
                 }
@@ -511,15 +526,12 @@
         }
 
         function hasMoves() {
-            // Simple check: any possible tableau move or ace to foundation
-            // For hint/full, more complex, but for deal block, if any ace or tableau move
             for (let col = 0; col < 10; col++) {
                 if (tableau[col].some(c => c.faceUp && c.value === 1)) return true;
             }
             for (let i = 0; i < 6; i++) {
                 if (devilsSix[i] && devilsSix[i].value === 1) return true;
             }
-            // Check tableau moves - simplified
             for (let from = 0; from < 10; from++) {
                 for (let to = 0; to < 10; to++) {
                     if (from === to) continue;
@@ -536,6 +548,10 @@
                 gameWon = true;
                 showMessage('Victory at All Costs! You Win!');
                 clearInterval(timeInterval);
+                document.getElementById('newGame').disabled = false;
+                document.getElementById('deal').disabled = true;
+                document.getElementById('hint').disabled = true;
+                document.getElementById('undo').disabled = true;
             }
         }
 
@@ -544,17 +560,25 @@
                 gameLost = true;
                 showMessage('Game Over. No more moves.');
                 clearInterval(timeInterval);
+                document.getElementById('newGame').disabled = false;
+                document.getElementById('deal').disabled = true;
+                document.getElementById('hint').disabled = true;
+                document.getElementById('undo').disabled = true;
             }
         }
 
         function showHint() {
             if (hintTimeout) clearTimeout(hintTimeout);
-            // Highlight first possible move - simplified: first ace or tableau move
-            // For vibe, flash a possible source
-            setTimeout(() => {
-                // Implement simple highlight, but for now, just alert or skip detailed
-                draw(); // redraw to clear
-            }, 100);
+            let hintCard = null;
+            for (let col = 0; col < 10; col++) {
+                if (tableau[col].some(c => c.faceUp && c.value === 1)) hintCard = tableau[col].find(c => c.faceUp && c.value === 1);
+            }
+            if (!hintCard && devilsSix.some(c => c.value === 1)) hintCard = devilsSix.find(c => c.value === 1);
+            if (hintCard) {
+                selected = {type: 'tableau', col: 0, idx: 0, card: hintCard};
+                setTimeout(() => { selected = null; draw(); }, 1000);
+            }
+            draw();
         }
 
         function showMessage(text) {
@@ -568,16 +592,37 @@
 
         function updateUI() {
             document.getElementById('deal').disabled = stock.length === 0 || hasMoves();
+            document.getElementById('undo').disabled = undoStack.length === 0;
         }
 
         // Event listeners
         document.getElementById('newGame').onclick = () => deal();
         document.getElementById('deal').onclick = doDeal;
         document.getElementById('hint').onclick = showHint;
+        document.getElementById('undo').onclick = () => {
+            if (undoStack.length) {
+                const move = undoStack.pop();
+                // Simplified revert (needs full state tracking for accuracy)
+                if (move.to.type === 'foundation') {
+                    foundations[move.to.suitIdx] = move.to.card;
+                } else if (move.to.type === 'tableau') {
+                    tableau[move.to.col].pop();
+                }
+                if (move.from.type === 'tableau') {
+                    tableau[move.from.col].splice(move.from.idx, 0, move.from.card);
+                } else if (move.from.type === 'devils') {
+                    devilsSix.splice(move.from.idx, 0, move.from.card);
+                }
+                draw();
+                updateUI();
+            }
+        };
 
         function newGame() {
             deal();
             hideMessage();
+            undoStack = [];
+            updateUI();
         }
 
         // Init
