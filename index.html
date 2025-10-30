@@ -381,27 +381,31 @@
     return true;
   }
 
+  // ===== KING-ANCHOR CHECK (single source of truth) =====
+  function isKingAnchored(col){
+    if (!col.length) return false;
+    const top = col[col.length - 1];
+    // rule we just agreed on: TOP face-up King = anchored
+    return !!top && top.faceUp && top.value === 13;
+  }
+
   // ===== DEAL =====
   function doDeal(){
-    // --- FIX 1: if stock is empty, still refresh UI so the button reflects it
+    // if no stock, just refresh
     if (!stock.length) {
       draw();
       updateUI();
       return;
     }
 
-    // if all columns are king-anchored, no deal
+    // if ALL columns are king-anchored, don't deal at all
     let allAnchored = true;
     for (let c=0;c<10;c++){
-      const col = tableau[c];
-      const top = col[col.length-1];
-      if (!(top && top.faceUp && top.value === 13)) {
+      if (!isKingAnchored(tableau[c])) {
         allAnchored = false;
         break;
       }
     }
-
-    // --- FIX 2: if all anchored, also refresh UI
     if (allAnchored) {
       draw();
       updateUI();
@@ -412,9 +416,9 @@
     for (let c=0;c<10;c++){
       if (!stock.length) break;
       const col = tableau[c];
-      const top = col[col.length-1];
-      const anchoredByKing = !!top && top.faceUp && top.value === 13;
-      if (anchoredByKing) continue;
+      // skip anchored columns (top is face-up king)
+      if (isKingAnchored(col)) continue;
+
       const card = stock.pop();
       if (!card) break;
       card.faceUp = true;
@@ -831,3 +835,4 @@
   </script>
 </body>
 </html>
+
