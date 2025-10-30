@@ -695,29 +695,67 @@
   // ===== TESTS (non-destructive) =====
   function runTests(){
     const out = [];
-    // snapshot
-    const snap = JSON.stringify({tableau,devilsSix,foundations,stock,deck,deals});
+    // snapshot EVERYTHING that tests may mutate, including undo/deals
+    const snapshot = JSON.stringify({
+      tableau,
+      devilsSix,
+      foundations,
+      stock,
+      deck,
+      deals,
+      undoStack
+    });
 
-    // 1. 8 foundations
-    out.push(['8 foundations', Array.isArray(foundations) && foundations.length===8]);
-    // 2. deal skips king-anchored
-    tableau[0].push(new Card('\u2660','K')); tableau[0][tableau[0].length-1].faceUp=true;
-    const len0 = tableau[0].length; const len1 = tableau[1].length; const stockBefore = stock.length;
-    doDeal();
-    out.push(['deal skips king column', tableau[0].length===len0]);
-    if (stockBefore>0) out.push(['deal hits non-king', tableau[1].length>=len1]);
-    // 3. blocked interior cannot start drag
-    tableau[3] = [new Card('\u2660','Q'), new Card('\u2665','9')]; tableau[3][0].faceUp=true; tableau[3][1].faceUp=true;
+    // 1. 8 foundations exist
+    out.push(['8 foundations', Array.isArray(foundations) && foundations.length === 8]);
+
+    // 2. deal skips king column
+    tableau[0].push(new Card('♠','K')); tableau[0][tableau[0].length-1].faceUp = true;
+    const len0 = tableau[0].length;
+    const len1 = tableau[1].length;
+    const stockBefore = stock.length;
+    // IMPORTANT: use a *test* deal that does NOT push to undoStack or touch DOM
+    const testDeal = () => {
+      if (!stock.length) return [];
+      const placed = [];
+      for (let c=0;c<10;c++){
+        if (!stock.length) break;
+        const col = tableau[c];
+        const top = col[col.length-1];
+        const anchored = !!top && top.faceUp && top.value === 13;
+        if (anchored) continue;
+        const card = stock.pop(); card.faceUp = true; col.push(card); placed.push({col,card});
+      }
+      return placed;
+    };
+    testDeal();
+    out.push(['deal skips king column', tableau[0].length === len0]);
+    if (stockBefore>0) out.push(['deal hits non-king', tableau[1].length >= len1]);
+
+    // 3. blocked interior cannot drag
+    tableau[3] = [new Card('♠','Q'), new Card('♥','9')];
+    tableau[3][0].faceUp = true; tableau[3][1].faceUp = true;
     out.push(['blocked interior cannot drag', !canStartDragAt(3,1)]);
-    // 4. foundation strict suit
-    const f0before = foundations[0].length;
-    const wrong = new Card('\u2660','3'); // spade 3
+
+    // 4. foundation strict suit check
+    const wrong = new Card('♠','3');
     out.push(['cannot place wrong suit on heart pile', !canPlaceOnFoundation(wrong,1)]);
 
-    // restore snapshot
-    const rest = JSON.parse(snap);
-    tableau = rest.tableau; devilsSix = rest.devilsSix; foundations = rest.foundations; stock = rest.stock; deck = rest.deck; deals = rest.deals;
+    // RESTORE to real game state (also restore undo/deals!)
+    const rest = JSON.parse(snapshot);
+    tableau = rest.tableau;
+    devilsSix = rest.devilsSix;
+    foundations = rest.foundations;
+    stock = rest.stock;
+    deck = rest.deck;
+    deals = rest.deals;
+    undoStack = rest.undoStack || [];
+    document.getElementById('deals').textContent = deals;
     draw();
+
+    const failed = out.filter(x=>!x[1]);
+    document.getElementById('testout').textContent = failed.length ? `Tests: ${out.length - failed.length}/${out.length} passed, ${failed.length} failed` : `Tests: ${out.length} passed`;
+  }
 
     const failed = out.filter(x=>!x[1]);
     document.getElementById('testout').textContent = failed.length ? `Tests: ${out.length - failed.length}/${out.length} passed, ${failed.length} failed` : `Tests: ${out.length} passed`;
@@ -730,4 +768,3 @@
   </script>
 </body>
 </html>
-
