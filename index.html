@@ -107,6 +107,17 @@
   for (let i=2;i<=10;i++) RVAL[i]=i;
   const PADDING = 16;
 
+  // ===== CARD CLASS =====
+  class Card {
+    constructor(suit, rank){
+      this.suit = suit;
+      this.rank = rank;
+      this.value = RVAL[rank];
+      this.color = COLORS[suit];
+      this.faceUp = false;
+    }
+  }
+
   // ===== STATE =====
   let tableau = new Array(10).fill(0).map(()=>[]);
   let devilsSix = [];
@@ -700,3 +711,4 @@
   </script>
 </body>
 </html>
+
