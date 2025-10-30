@@ -15,7 +15,6 @@
     }
     canvas { display: block; width: 100%; height: 100%; }
 
-    /* Control panel – we will place it to the RIGHT of Devil's Six when space allows, otherwise just below */
     #ui {
       position:absolute;
       top:70px;
@@ -95,8 +94,9 @@
   </div>
   <div id="testout"></div>
   <canvas id="game"></canvas>
+
   <script>
-  // ===== CORE CONSTANTS =====
+  // ===== CONSTANTS =====
   const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
@@ -125,15 +125,16 @@
   let stock = [];
   let deck = [];
   let deals = 0;
-  let timeStart = 0; let timer = null;
+  let timeStart = 0;
+  let timer = null;
   let undoStack = [];
   let career = +localStorage.getItem('careerScore') || 0;
   document.getElementById('careerScore').textContent = career;
 
-  // card drawing sizes (responsive)
+  // draw sizes
   let CARD_W = 80, CARD_H = 120, OVERLAP = 26;
 
-  // top band geometry
+  // top-band layout
   const TopGeom = {
     dsX: PADDING,
     dsY: PADDING,
@@ -148,7 +149,7 @@
     fY: PADDING
   };
 
-  // ===== RESIZE / LAYOUT =====
+  // ===== LAYOUT =====
   function layout(){
     const w = canvas.getBoundingClientRect().width;
     CARD_W = Math.max(58, Math.min(90, Math.floor((w - PADDING*2)/14)));
@@ -169,12 +170,12 @@
     const r = canvas.getBoundingClientRect();
     TopGeom.dsX = PADDING;
     TopGeom.dsY = PADDING;
-    TopGeom.dsStep = Math.max(Math.floor(CARD_W * 0.62), 34); // tighter, like commercial app
+    TopGeom.dsStep = Math.max(Math.floor(CARD_W * 0.62), 34);
     const dsVisualWidth = CARD_W + (6-1)*TopGeom.dsStep;
     TopGeom.stockX = TopGeom.dsX + dsVisualWidth + 14;
     TopGeom.stockY = TopGeom.dsY;
 
-    // 2 rows of 4 foundations, right-aligned
+    // 2x4 foundations right-aligned
     TopGeom.fCols = 4; TopGeom.fRows = 2;
     TopGeom.fGapX = 10; TopGeom.fGapY = 8; TopGeom.fY = PADDING;
     const totalFW = TopGeom.fCols*CARD_W + (TopGeom.fCols-1)*TopGeom.fGapX;
@@ -193,7 +194,7 @@
     const r = canvas.getBoundingClientRect();
     const dsRight = TopGeom.dsX + CARD_W + (6-1)*TopGeom.dsStep;
     const uiWidth = ui.getBoundingClientRect().width;
-    // try to put to the right of DS if it fits, otherwise below
+    // to the right of DS if it fits
     if (dsRight + 14 + uiWidth < r.width - 260) {
       ui.style.left = (dsRight + 14) + 'px';
       ui.style.top = (TopGeom.dsY + 2) + 'px';
@@ -214,12 +215,16 @@
   }
   window.addEventListener('resize', resizeCanvas);
 
-  // ===== CARDS / DRAW =====
+  // ===== DRAWING =====
+  let stockHit = {x:0,y:0,w:0,h:0};
+  let drag = null;
+  let mouseX = 0, mouseY = 0;
+
   function drawCard(card,x,y,opts={}){
-    const {ghost=false,highlight=false,empty=false,suitHint=null} = opts;
+    const {highlight=false,empty=false,suitHint=null,ghost=false} = opts;
     ctx.save();
     ctx.translate(x,y);
-    ctx.globalAlpha = ghost ? 0.82 : 1;
+    ctx.globalAlpha = ghost ? 0.85 : 1;
     if (card){
       ctx.fillStyle = '#fff';
       ctx.strokeStyle = '#111';
@@ -227,13 +232,11 @@
       ctx.fillRect(0,0,CARD_W,CARD_H);
       ctx.strokeRect(0,0,CARD_W,CARD_H);
       if (card.faceUp){
-        ctx.fillStyle = card.color==='red' ? '#c52929' : '#111';
+        ctx.fillStyle = card.color === 'red' ? '#c52929' : '#111';
         ctx.font = `bold ${Math.floor(CARD_W/3)}px system-ui`;
         ctx.textAlign='left'; ctx.textBaseline='top';
         ctx.fillText(card.rank,6,4);
         ctx.fillText(card.suit,6,Math.floor(CARD_H/2));
-        ctx.save(); ctx.translate(CARD_W-6,CARD_H-4); ctx.rotate(Math.PI);
-        ctx.fillText(card.rank,0,0); ctx.fillText(card.suit,0,Math.floor(CARD_H/2)); ctx.restore();
       } else {
         ctx.fillStyle = '#1947a5';
         ctx.fillRect(4,4,CARD_W-8,CARD_H-8);
@@ -241,7 +244,8 @@
         ctx.strokeRect(8,8,CARD_W-16,CARD_H-16);
       }
       if (highlight){
-        ctx.strokeStyle = '#ffd54f'; ctx.lineWidth = 3;
+        ctx.strokeStyle = '#ffd54f';
+        ctx.lineWidth = 3;
         ctx.strokeRect(1,1,CARD_W-2,CARD_H-2);
       }
     } else {
@@ -250,8 +254,8 @@
       ctx.strokeRect(0,0,CARD_W,CARD_H);
       ctx.setLineDash([]);
       if (suitHint){
-        ctx.fillStyle='#888';
-        ctx.font=`bold ${Math.floor(CARD_W/3)}px system-ui`;
+        ctx.fillStyle = '#888';
+        ctx.font = `bold ${Math.floor(CARD_W/3)}px system-ui`;
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText('A'+suitHint, CARD_W/2, CARD_H/2);
       }
@@ -259,40 +263,43 @@
     ctx.restore();
   }
 
-  let stockHit = {x:0,y:0,w:0,h:0};
-  let drag = null; // {from:{...}, cards:[]}
-  let mouseX = 0, mouseY = 0;
-
   function draw(){
     const r = canvas.getBoundingClientRect();
     ctx.clearRect(0,0,r.width,r.height);
-    // Devil's Six
+
+    // devils six
     for (let i=0;i<devilsSix.length;i++){
       drawCard(devilsSix[i], TopGeom.dsX + i*TopGeom.dsStep, TopGeom.dsY);
     }
-    // Stock
+    // stock
     drawCard(stock.length ? {faceUp:false} : null, TopGeom.stockX, TopGeom.stockY);
     stockHit = {x:TopGeom.stockX, y:TopGeom.stockY, w:CARD_W, h:CARD_H};
-    // Foundations (2 x 4)
+
+    // foundations
     for (let i=0;i<8;i++){
       const slot = TopGeom.fSlots[i];
       const stack = foundations[i];
       const top = stack.length ? stack[stack.length-1] : null;
       drawCard(top, slot.x, slot.y, {empty:!top, suitHint:SUITS[i%4]});
     }
-    // Tableau
+
+    // tableau
     const tY = tableauTopY();
     for (let c=0;c<10;c++){
       const x = colX(c);
       const col = tableau[c];
-      if (col.length===0){ drawCard(null,x,tY); continue; }
+      if (!col.length){
+        drawCard(null,x,tY);
+        continue;
+      }
       for (let i=0;i<col.length;i++){
         const card = col[i];
         if (drag && drag.from.type==='tableau' && drag.from.col===c && i>=drag.from.idx) continue;
         drawCard(card, x, tY + i*OVERLAP);
       }
     }
-    // Drag stack on top
+
+    // drag
     if (drag){
       for (let i=0;i<drag.cards.length;i++){
         drawCard(drag.cards[i], mouseX - CARD_W/2, mouseY - CARD_H/2 + i*OVERLAP, {ghost:true,highlight:true});
@@ -302,28 +309,35 @@
 
   // ===== HITTEST =====
   function hitAt(x,y){
-    // foundations first
+    // foundations
     for (let i=0;i<8;i++){
       const s = TopGeom.fSlots[i];
-      if (x>s.x && x<s.x+CARD_W && y>s.y && y<s.y+CARD_H) return {type:'foundation', idx:i};
+      if (x>s.x && x<s.x+CARD_W && y>s.y && y<s.y+CARD_H)
+        return {type:'foundation', idx:i};
     }
-    // devils six
+    // devils
     for (let i=0;i<devilsSix.length;i++){
       const dx = TopGeom.dsX + i*TopGeom.dsStep, dy=TopGeom.dsY;
-      if (x>dx && x<dx+CARD_W && y>dy && y<dy+CARD_H) return {type:'devils', idx:i};
+      if (x>dx && x<dx+CARD_W && y>dy && y<dy+CARD_H)
+        return {type:'devils', idx:i};
     }
     // stock
-    if (stock.length && x>stockHit.x && x<stockHit.x+CARD_W && y>stockHit.y && y<stockHit.y+CARD_H){
+    if (stock.length && x>stockHit.x && x<stockHit.x+CARD_W && y>stockHit.y && y<stockHit.y+CARD_H)
       return {type:'stock'};
-    }
+
     // tableau
     const tY = tableauTopY();
     for (let c=0;c<10;c++){
-      const cx = colX(c); const col = tableau[c];
-      if (col.length===0){ if (x>cx && x<cx+CARD_W && y>tY && y<tY+CARD_H) return {type:'tableau', col:c, row:-1}; continue; }
+      const cx = colX(c);
+      const col = tableau[c];
+      if (!col.length){
+        if (x>cx && x<cx+CARD_W && y>tY && y<tY+CARD_H) return {type:'tableau', col:c, row:-1};
+        continue;
+      }
       for (let i=col.length-1;i>=0;i--){
         const cy = tY + i*OVERLAP;
-        if (x>cx && x<cx+CARD_W && y>cy && y<cy+CARD_H) return {type:'tableau', col:c, row:i};
+        if (x>cx && x<cx+CARD_W && y>cy && y<cy+CARD_H)
+          return {type:'tableau', col:c, row:i};
       }
     }
     return null;
@@ -345,11 +359,10 @@
   function canPlaceOnTableau(card, toCol){
     const col = tableau[toCol];
     const top = col[col.length-1];
-    if (!top) return card.value === 13; // only K on empty
+    if (!top) return card.value === 13;
     return (card.color !== top.color) && (card.value === top.value - 1);
   }
   function canPlaceOnFoundation(card, fIdx){
-    // STRICT: correct suit + next rank only
     if (SUITS[fIdx % 4] !== card.suit) return false;
     const stack = foundations[fIdx];
     const top   = stack[stack.length-1];
@@ -357,17 +370,18 @@
   }
   function flipTop(col){
     const colArr = tableau[col];
-    if (colArr.length && !colArr[colArr.length-1].faceUp) colArr[colArr.length-1].faceUp = true;
+    if (colArr.length && !colArr[colArr.length-1].faceUp)
+      colArr[colArr.length-1].faceUp = true;
   }
   function canStartDragAt(col, row){
     const colArr = tableau[col];
     if (row < 0 || row >= colArr.length) return false;
     const card = colArr[row];
     if (!card.faceUp) return false;
-    // if there is a face-up card above, it must chain correctly — otherwise blocked
     if (row>0 && colArr[row-1].faceUp){
       const above = colArr[row-1];
-      if (!(above.color !== card.color && above.value === card.value + 1)) return false;
+      if (!(above.color !== card.color && above.value === card.value + 1))
+        return false;
     }
     return true;
   }
@@ -375,12 +389,13 @@
   // ===== DEAL =====
   function doDeal(){
     if (!stock.length) return;
-    // check if all 10 piles are king-anchored (face-up K on top)
+
+    // if all columns are king-anchored, no deal
     let allAnchored = true;
-    for (let c = 0; c < 10; c++) {
+    for (let c=0;c<10;c++){
       const col = tableau[c];
-      const top = col[col.length - 1];
-      if (!(top && top.faceUp && top.value === 13)) { // not an anchored king
+      const top = col[col.length-1];
+      if (!(top && top.faceUp && top.value === 13)) {
         allAnchored = false;
         break;
       }
@@ -388,32 +403,34 @@
     if (allAnchored) return;
 
     const dealt = [];
-    for (let c = 0; c < 10; c++) {
-      if (!stock.length) break; // ran out mid-pass
+    for (let c=0;c<10;c++){
+      if (!stock.length) break;
       const col = tableau[c];
-      const top = col[col.length - 1];
+      const top = col[col.length-1];
       const anchoredByKing = !!top && top.faceUp && top.value === 13;
       if (anchoredByKing) continue;
       const card = stock.pop();
       if (!card) break;
       card.faceUp = true;
       col.push(card);
-      dealt.push({ col: c, card });
+      dealt.push({col:c, card});
     }
-    if (!dealt.length) {
+
+    if (!dealt.length){
       draw();
       updateUI();
       return;
     }
+
     deals++;
     document.getElementById('deals').textContent = deals;
-    undoStack.push({ kind: 'deal', payload: dealt });
+    undoStack.push({kind:'deal', payload:dealt});
     draw();
     updateUI();
     checkWinOrStuck();
   }
 
-  // ===== GAME STATE CHECKS =====
+  // ===== GAME CHECKS =====
   function hasAnyMoves(){
     // to foundation from tableau
     for (let c=0;c<10;c++){
@@ -421,8 +438,10 @@
       if (!top) continue;
       for (let f=0;f<8;f++) if (canPlaceOnFoundation(top,f)) return true;
     }
-    // from Devil's Six
-    for (const card of devilsSix){ for (let f=0;f<8;f++) if (canPlaceOnFoundation(card,f)) return true; }
+    // from devil's six
+    for (const card of devilsSix){
+      for (let f=0;f<8;f++) if (canPlaceOnFoundation(card,f)) return true;
+    }
     // tableau-to-tableau
     for (let from=0;from<10;from++){
       const col = tableau[from];
@@ -471,12 +490,12 @@
         }
       }
     }
-    // Fisher-Yates
+    // shuffle
     for (let i=temp.length-1; i>0; i--){
       const j = Math.floor(Math.random()*(i+1));
       [temp[i], temp[j]] = [temp[j], temp[i]];
     }
-    deck = temp; // 104 unique cards
+    deck = temp;
   }
   function newGame(){
     buildDeck();
@@ -486,20 +505,31 @@
     stock = [];
     undoStack = [];
 
-    // Devil's Six (always 6 face-up)
-    for (let i=0;i<6;i++){ const c=deck.pop(); c.faceUp=true; devilsSix.push(c); }
+    // Devil's Six
+    for (let i=0;i<6;i++){
+      const c = deck.pop();
+      c.faceUp = true;
+      devilsSix.push(c);
+    }
 
-    // tableau initial
+    // tableau pattern
     const downs = [0,1,2,3,4,4,3,2,1,0];
     for (let col=0; col<10; col++){
       for (let d=0; d<downs[col]; d++){
-        const c = deck.pop(); c.faceUp=false; tableau[col].push(c);
+        const c = deck.pop();
+        c.faceUp = false;
+        tableau[col].push(c);
       }
-      const up = deck.pop(); up.faceUp=true; tableau[col].push(up);
+      const up = deck.pop();
+      up.faceUp = true;
+      tableau[col].push(up);
     }
+
     // remaining is stock
     stock = deck;
-    deals = 0; document.getElementById('deals').textContent = deals;
+    deals = 0;
+    document.getElementById('deals').textContent = deals;
+
     timeStart = Date.now();
     if (timer) clearInterval(timer);
     timer = setInterval(()=>{
@@ -508,11 +538,12 @@
       const ss = (s%60).toString().padStart(2,'0');
       document.getElementById('time').textContent = `${m}:${ss}`;
     },1000);
+
     updateUI();
     draw();
   }
 
-  // ===== UI HELPERS =====
+  // ===== UI / MESSAGE =====
   function updateUI(disable=false){
     document.getElementById('deal').disabled = disable || stock.length===0;
     document.getElementById('undo').disabled = disable || undoStack.length===0;
@@ -529,83 +560,145 @@
   // ===== EVENTS =====
   canvas.addEventListener('mousemove', e=>{
     const r = canvas.getBoundingClientRect();
-    mouseX = e.clientX - r.left; mouseY = e.clientY - r.top;
+    mouseX = e.clientX - r.left;
+    mouseY = e.clientY - r.top;
     if (drag) draw();
   });
+
   canvas.addEventListener('mousedown', e=>{
     const r = canvas.getBoundingClientRect();
-    mouseX = e.clientX - r.left; mouseY = e.clientY - r.top;
+    mouseX = e.clientX - r.left;
+    mouseY = e.clientY - r.top;
     const hit = hitAt(mouseX, mouseY);
     if (!hit) return;
-    if (hit.type==='stock'){ doDeal(); return; }
 
-    // click-to-foundation ONLY for aces
-    if (hit.type==='tableau' && hit.row>=0){
+    // stock click
+    if (hit.type === 'stock'){
+      doDeal();
+      return;
+    }
+
+    // click-to-foundation for tableau A
+    if (hit.type === 'tableau' && hit.row >= 0){
       const card = tableau[hit.col][hit.row];
-      if (card.faceUp && card.value===1 && canStartDragAt(hit.col, hit.row)){
+      if (card && card.faceUp && card.value === 1){
+        // try to place on matching suit foundation
         const candidates = [];
-        for (let f=0;f<8;f++){ if (SUITS[f%4]===card.suit) candidates.push(f); }
+        for (let f=0;f<8;f++) if (SUITS[f%4] === card.suit) candidates.push(f);
         let placed = false;
-        // first try empty of that suit
-        for (const f of candidates){ if (foundations[f].length===0){ foundations[f].push(card); tableau[hit.col].splice(hit.row,1); flipTop(hit.col); undoStack.push({kind:'toFound', from:{type:'tableau',col:hit.col,idx:hit.row}, fIdx:f, card}); placed=true; break; } }
-        // then try correct next-rank
-        if (!placed){ for (const f of candidates){ if (canPlaceOnFoundation(card,f)){ foundations[f].push(card); tableau[hit.col].splice(hit.row,1); flipTop(hit.col); undoStack.push({kind:'toFound', from:{type:'tableau',col:hit.col,idx:hit.row}, fIdx:f, card}); placed=true; break; } } }
-        if (placed){ draw(); updateUI(); checkWinOrStuck(); }
+        for (const f of candidates){
+          if (foundations[f].length === 0){
+            foundations[f].push(card);
+            tableau[hit.col].splice(hit.row,1);
+            flipTop(hit.col);
+            undoStack.push({kind:'toFound', from:{type:'tableau',col:hit.col,idx:hit.row}, fIdx:f, card});
+            placed = true;
+            break;
+          }
+        }
+        if (!placed){
+          for (const f of candidates){
+            if (canPlaceOnFoundation(card, f)){
+              foundations[f].push(card);
+              tableau[hit.col].splice(hit.row,1);
+              flipTop(hit.col);
+              undoStack.push({kind:'toFound', from:{type:'tableau',col:hit.col,idx:hit.row}, fIdx:f, card});
+              placed = true;
+              break;
+            }
+          }
+        }
+        if (placed){
+          draw();
+          updateUI();
+          checkWinOrStuck();
+        }
         return;
       }
     }
-    if (hit.type==='devils'){
+
+    // click-to-foundation for Devil's Six A
+    if (hit.type === 'devils'){
       const card = devilsSix[hit.idx];
-      if (card && card.value===1){
-        const options = [];
-        for (let f=0;f<8;f++){ if (SUITS[f%4]===card.suit) options.push(f); }
+      if (card && card.value === 1){
+        const candidates = [];
+        for (let f=0;f<8;f++) if (SUITS[f%4] === card.suit) candidates.push(f);
         let placed = false;
-        for (const f of options){ if (foundations[f].length===0){ foundations[f].push(card); devilsSix.splice(hit.idx,1); undoStack.push({kind:'toFound', from:{type:'devils', idx:hit.idx}, fIdx:f, card}); placed=true; break; } }
-        if (!placed){ for (const f of options){ if (canPlaceOnFoundation(card,f)){ foundations[f].push(card); devilsSix.splice(hit.idx,1); undoStack.push({kind:'toFound', from:{type:'devils', idx:hit.idx}, fIdx:f, card}); placed=true; break; } } }
-        if (placed){ draw(); updateUI(); checkWinOrStuck(); }
+        for (const f of candidates){
+          if (foundations[f].length === 0){
+            foundations[f].push(card);
+            devilsSix.splice(hit.idx,1);
+            undoStack.push({kind:'toFound', from:{type:'devils',idx:hit.idx}, fIdx:f, card});
+            placed = true;
+            break;
+          }
+        }
+        if (!placed){
+          for (const f of candidates){
+            if (canPlaceOnFoundation(card, f)){
+              foundations[f].push(card);
+              devilsSix.splice(hit.idx,1);
+              undoStack.push({kind:'toFound', from:{type:'devils',idx:hit.idx}, fIdx:f, card});
+              placed = true;
+              break;
+            }
+          }
+        }
+        if (placed){
+          draw();
+          updateUI();
+          checkWinOrStuck();
+        }
         return;
       }
     }
 
     // start drag from tableau
-    if (hit.type==='tableau'){
-      if (hit.row<0) return;
+    if (hit.type === 'tableau'){
+      if (hit.row < 0) return;
       if (!canStartDragAt(hit.col, hit.row)) return;
       const runLen = getRunLength(hit.col, hit.row);
       drag = {
-        from:{type:'tableau', col:hit.col, idx:hit.row},
+        from: {type:'tableau', col:hit.col, idx:hit.row},
         cards: tableau[hit.col].slice(hit.row, hit.row + runLen)
       };
       draw();
       return;
     }
+
     // start drag from devils
-    if (hit.type==='devils'){
+    if (hit.type === 'devils'){
       const card = devilsSix[hit.idx];
       drag = {from:{type:'devils', idx:hit.idx}, cards:[card]};
       draw();
       return;
     }
   });
+
   window.addEventListener('mouseup', e=>{
     if (!drag) return;
     const r = canvas.getBoundingClientRect();
-    mouseX = e.clientX - r.left; mouseY = e.clientY - r.top;
+    mouseX = e.clientX - r.left;
+    mouseY = e.clientY - r.top;
     const drop = hitAt(mouseX, mouseY);
     const moving = drag.cards[0];
     let moved = false;
+
     if (drop){
-      // to foundation (single card only, strict)
-      if (drop.type==='foundation' && drag.cards.length===1 && canPlaceOnFoundation(moving, drop.idx)){
+      // to foundation
+      if (drop.type === 'foundation' && drag.cards.length === 1 && canPlaceOnFoundation(moving, drop.idx)){
         foundations[drop.idx].push(moving);
-        if (drag.from.type==='tableau'){
-          tableau[drag.from.col].splice(drag.from.idx,1); flipTop(drag.from.col);
-        } else { devilsSix.splice(drag.from.idx,1); }
+        if (drag.from.type === 'tableau'){
+          tableau[drag.from.col].splice(drag.from.idx,1);
+          flipTop(drag.from.col);
+        } else {
+          devilsSix.splice(drag.from.idx,1);
+        }
         undoStack.push({kind:'toFound', from:JSON.parse(JSON.stringify(drag.from)), fIdx:drop.idx, card:moving});
         moved = true;
       }
       // tableau-to-tableau
-      else if (drop.type==='tableau' && drag.from.type==='tableau' && canPlaceOnTableau(moving, drop.col)){
+      else if (drop.type === 'tableau' && drag.from.type === 'tableau' && canPlaceOnTableau(moving, drop.col)){
         const run = drag.cards.slice();
         tableau[drop.col].push(...run);
         tableau[drag.from.col].splice(drag.from.idx, run.length);
@@ -614,16 +707,52 @@
         moved = true;
       }
     }
-    drag = null; draw();
-    if (moved){ updateUI(); checkWinOrStuck(); }
+
+    drag = null;
+    draw();
+    if (moved){
+      updateUI();
+      checkWinOrStuck();
+    }
+  });
+
+  // ===== UNDO =====
+  document.getElementById('undo').addEventListener('click', ()=>{
+    if (!undoStack.length) return;
+    const step = undoStack.pop();
+    if (step.kind === 'deal'){
+      for (let i=step.payload.length-1;i>=0;i--){
+        const {col,card} = step.payload[i];
+        tableau[col].pop();
+        card.faceUp = false;
+        stock.push(card);
+      }
+      deals = Math.max(0, deals-1);
+      document.getElementById('deals').textContent = deals;
+    } else if (step.kind === 'tab2tab'){
+      const moved = tableau[step.toCol].splice(-step.count, step.count);
+      tableau[step.from.col].splice(step.from.idx, 0, ...moved);
+      flipTop(step.from.col);
+    } else if (step.kind === 'toFound'){
+      const card = foundations[step.fIdx].pop();
+      if (step.from.type === 'tableau'){
+        tableau[step.from.col].splice(step.from.idx,0,card);
+      } else {
+        devilsSix.splice(step.from.idx,0,card);
+      }
+    }
+    draw();
+    updateUI();
   });
 
   // ===== HINT =====
   function hint(){
-    // 1) tableau -> foundation
+    // non-destructive visual hint only
     const tY = tableauTopY();
+    // 1) tableau -> foundation
     for (let c=0;c<10;c++){
-      const col = tableau[c]; const top = col[col.length-1];
+      const col = tableau[c];
+      const top = col[col.length-1];
       if (!top) continue;
       for (let f=0;f<8;f++){
         if (canPlaceOnFoundation(top,f)){
@@ -646,8 +775,8 @@
     for (let from=0;from<10;from++){
       const col = tableau[from];
       for (let i=0;i<col.length;i++){
-        if (!col[i].faceUp) continue;
         const card = col[i];
+        if (!card.faceUp) continue;
         for (let to=0;to<10;to++){
           if (to===from) continue;
           if (canPlaceOnTableau(card,to)){
@@ -659,32 +788,13 @@
     }
   }
   function flash(paint){
-    let n=0; const id=setInterval(()=>{ draw(); if (n%2===0) paint(); if (++n>5) clearInterval(id); },120);
+    let n=0;
+    const id=setInterval(()=>{
+      draw();
+      if (n%2===0) paint();
+      if (++n>5) clearInterval(id);
+    },120);
   }
-
-  // ===== UNDO =====
-  document.getElementById('undo').addEventListener('click', ()=>{
-    if (!undoStack.length) return;
-    const step = undoStack.pop();
-    if (step.kind==='deal'){
-      for (let i=step.payload.length-1;i>=0;i--){
-        const {col,card} = step.payload[i];
-        tableau[col].pop();
-        card.faceUp = false; // return to stock facedown
-        stock.push(card);
-      }
-      deals = Math.max(0, deals-1);
-      document.getElementById('deals').textContent = deals;
-    } else if (step.kind==='tab2tab'){
-      const moved = tableau[step.toCol].splice(-step.count, step.count);
-      tableau[step.from.col].splice(step.from.idx, 0, ...moved);
-      flipTop(step.from.col);
-    } else if (step.kind==='toFound'){
-      const card = foundations[step.fIdx].pop();
-      if (step.from.type==='tableau') tableau[step.from.col].splice(step.from.idx,0,card); else devilsSix.splice(step.from.idx,0,card);
-    }
-    draw(); updateUI();
-  });
 
   // ===== BUTTONS =====
   document.getElementById('newGame').addEventListener('click', ()=>{ hideMessage(); newGame(); });
@@ -692,81 +802,20 @@
   document.getElementById('hint').addEventListener('click', hint);
   document.getElementById('playAgain').addEventListener('click', ()=>{ hideMessage(); newGame(); });
 
-  // ===== TESTS (non-destructive) =====
+  // ===== LIGHTWEIGHT TESTS =====
   function runTests(){
-    // Lightweight, non-destructive smoke tests only.
-    // The previous version tried to JSON-serialize live Card objects, which
-    // stripped methods/fields and broke the running game on load. So now we
-    // only assert conditions that do NOT mutate state.
-    const out = [];
-    // 1. we have 8 foundation slots
-    out.push(['8 foundations', Array.isArray(foundations) && foundations.length === 8]);
-    // 2. we have 10 tableau columns
-    out.push(['10 tableau columns', Array.isArray(tableau) && tableau.length === 10]);
-    // 3. devils six is 6 cards, all faceUp
-    out.push(['Devils Six has 6 cards', Array.isArray(devilsSix) && devilsSix.length === 6]);
-    out.push(['All Devils Six faceUp', devilsSix.every(c => c && c.faceUp));
-    // report
-    const failed = out.filter(t => !t[1]);
+    const results = [];
+    results.push(['8 foundations', Array.isArray(foundations) && foundations.length === 8]);
+    results.push(['10 tableau columns', Array.isArray(tableau) && tableau.length === 10]);
+    results.push(['Devil’s Six is 6 cards', Array.isArray(devilsSix) && devilsSix.length === 6]);
+    results.push(['Devil’s Six faceup', devilsSix.every(c => c && c.faceUp)]);
+    const failed = results.filter(r=>!r[1]);
     const el = document.getElementById('testout');
-    if (el) {
-      el.textContent = failed.length ? `Tests: ${out.length - failed.length}/${out.length} passed, ${failed.length} failed` : `Tests: ${out.length} passed`;
+    if (el){
+      el.textContent = failed.length
+        ? `Tests: ${results.length - failed.length}/${results.length} passed, ${failed.length} failed`
+        : `Tests: ${results.length} passed`;
     }
-  });
-
-    // 1. 8 foundations exist
-    out.push(['8 foundations', Array.isArray(foundations) && foundations.length === 8]);
-
-    // 2. deal skips king column
-    tableau[0].push(new Card('♠','K')); tableau[0][tableau[0].length-1].faceUp = true;
-    const len0 = tableau[0].length;
-    const len1 = tableau[1].length;
-    const stockBefore = stock.length;
-    // IMPORTANT: use a *test* deal that does NOT push to undoStack or touch DOM
-    const testDeal = () => {
-      if (!stock.length) return [];
-      const placed = [];
-      for (let c=0;c<10;c++){
-        if (!stock.length) break;
-        const col = tableau[c];
-        const top = col[col.length-1];
-        const anchored = !!top && top.faceUp && top.value === 13;
-        if (anchored) continue;
-        const card = stock.pop(); card.faceUp = true; col.push(card); placed.push({col,card});
-      }
-      return placed;
-    };
-    testDeal();
-    out.push(['deal skips king column', tableau[0].length === len0]);
-    if (stockBefore>0) out.push(['deal hits non-king', tableau[1].length >= len1]);
-
-    // 3. blocked interior cannot drag
-    tableau[3] = [new Card('♠','Q'), new Card('♥','9')];
-    tableau[3][0].faceUp = true; tableau[3][1].faceUp = true;
-    out.push(['blocked interior cannot drag', !canStartDragAt(3,1)]);
-
-    // 4. foundation strict suit check
-    const wrong = new Card('♠','3');
-    out.push(['cannot place wrong suit on heart pile', !canPlaceOnFoundation(wrong,1)]);
-
-    // RESTORE to real game state (also restore undo/deals!)
-    const rest = JSON.parse(snapshot);
-    tableau = rest.tableau;
-    devilsSix = rest.devilsSix;
-    foundations = rest.foundations;
-    stock = rest.stock;
-    deck = rest.deck;
-    deals = rest.deals;
-    undoStack = rest.undoStack || [];
-    document.getElementById('deals').textContent = deals;
-    draw();
-
-    const failed = out.filter(x=>!x[1]);
-    document.getElementById('testout').textContent = failed.length ? `Tests: ${out.length - failed.length}/${out.length} passed, ${failed.length} failed` : `Tests: ${out.length} passed`;
-  }
-
-    const failed = out.filter(x=>!x[1]);
-    document.getElementById('testout').textContent = failed.length ? `Tests: ${out.length - failed.length}/${out.length} passed, ${failed.length} failed` : `Tests: ${out.length} passed`;
   }
 
   // ===== BOOT =====
