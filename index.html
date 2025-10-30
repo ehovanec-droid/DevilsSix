@@ -694,17 +694,25 @@
 
   // ===== TESTS (non-destructive) =====
   function runTests(){
+    // Lightweight, non-destructive smoke tests only.
+    // The previous version tried to JSON-serialize live Card objects, which
+    // stripped methods/fields and broke the running game on load. So now we
+    // only assert conditions that do NOT mutate state.
     const out = [];
-    // snapshot EVERYTHING that tests may mutate, including undo/deals
-    const snapshot = JSON.stringify({
-      tableau,
-      devilsSix,
-      foundations,
-      stock,
-      deck,
-      deals,
-      undoStack
-    });
+    // 1. we have 8 foundation slots
+    out.push(['8 foundations', Array.isArray(foundations) && foundations.length === 8]);
+    // 2. we have 10 tableau columns
+    out.push(['10 tableau columns', Array.isArray(tableau) && tableau.length === 10]);
+    // 3. devils six is 6 cards, all faceUp
+    out.push(['Devils Six has 6 cards', Array.isArray(devilsSix) && devilsSix.length === 6]);
+    out.push(['All Devils Six faceUp', devilsSix.every(c => c && c.faceUp));
+    // report
+    const failed = out.filter(t => !t[1]);
+    const el = document.getElementById('testout');
+    if (el) {
+      el.textContent = failed.length ? `Tests: ${out.length - failed.length}/${out.length} passed, ${failed.length} failed` : `Tests: ${out.length} passed`;
+    }
+  });
 
     // 1. 8 foundations exist
     out.push(['8 foundations', Array.isArray(foundations) && foundations.length === 8]);
