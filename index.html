@@ -378,25 +378,19 @@
     if (row < 0 || row >= colArr.length) return false;
     const card = colArr[row];
     if (!card.faceUp) return false;
-    if (row>0 && colArr[row-1].faceUp){
-      const above = colArr[row-1];
-      if (!(above.color !== card.color && above.value === card.value + 1))
-        return false;
-    }
     return true;
   }
 
   // ===== DEAL =====
   function doDeal(){
-    // 1) no stock: refresh + check terminal
+    // --- FIX 1: if stock is empty, still refresh UI so the button reflects it
     if (!stock.length) {
       draw();
       updateUI();
-      checkWinOrStuck();   // <--- important
       return;
     }
 
-    // 2) if all columns are king-anchored, no deal
+    // if all columns are king-anchored, no deal
     let allAnchored = true;
     for (let c=0;c<10;c++){
       const col = tableau[c];
@@ -406,14 +400,14 @@
         break;
       }
     }
+
+    // --- FIX 2: if all anchored, also refresh UI
     if (allAnchored) {
       draw();
       updateUI();
-      checkWinOrStuck();   // <--- important
       return;
     }
 
-    // 3) normal deal
     const dealt = [];
     for (let c=0;c<10;c++){
       if (!stock.length) break;
@@ -428,15 +422,12 @@
       dealt.push({col:c, card});
     }
 
-    // 4) it's possible that after filtering king columns we didn't actually place any card
     if (!dealt.length){
       draw();
       updateUI();
-      checkWinOrStuck();   // <--- important
       return;
     }
 
-    // 5) success path (unchanged)
     deals++;
     document.getElementById('deals').textContent = deals;
     undoStack.push({kind:'deal', payload:dealt});
