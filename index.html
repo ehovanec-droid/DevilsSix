@@ -2,15 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Devil's Six / Churchill Solitaire – Work-in-Progress</title>
+  <title>Devil's Six / Churchill Solitaire – Working Copy (Fixed)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     :root {
       --bg: #0b1723;
-      --felt: #0f3b2a;
       --card: #fff;
       --card-border: #d7d7d7;
-      --accent: #f6b700;
+      --panel: rgba(255,255,255,0.04);
     }
     body {
       margin: 0;
@@ -18,41 +17,17 @@
       color: #fff;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
-    .top-bar {
-      display: flex;
-      gap: 0.5rem;
-      padding: 0.75rem 1rem;
-      background: rgba(0,0,0,0.35);
-      align-items: center;
-      position: sticky;
-      top: 0;
-      z-index: 5;
-    }
-    button {
-      background: #1b5c7c;
-      border: none;
-      color: #fff;
-      padding: 0.45rem 0.8rem;
-      border-radius: 4px;
-      cursor: pointer;
-      font-weight: 600;
-    }
-    button:disabled {
-      background: rgba(255,255,255,0.15);
-      cursor: not-allowed;
-    }
-    .table {
+    .layout {
       display: flex;
       gap: 1rem;
       padding: 1rem;
+      align-items: flex-start;
     }
     .left-col {
       flex: 1 1 auto;
+      min-width: 650px;
     }
-    .right-col {
-      width: 260px;
-    }
-    .row {
+    .top-row {
       display: flex;
       gap: 1rem;
       margin-bottom: 1rem;
@@ -66,7 +41,7 @@
     }
     .pile {
       width: 90px;
-      min-height: 125px;
+      min-height: 120px;
       background: rgba(255,255,255,0.04);
       border: 1px dashed rgba(255,255,255,0.07);
       border-radius: 6px;
@@ -116,15 +91,17 @@
       outline: 2px solid #ffcc00;
       outline-offset: 2px;
     }
-
-    /* Devil's Six panel */
+    .right-col {
+      width: 280px;
+      position: sticky;
+      top: 1rem;
+    }
     .devils-six {
       background: rgba(255,255,255,0.03);
       border: 1px solid rgba(255,255,255,0.05);
       border-radius: 6px;
       padding: 0.75rem;
-      position: sticky;
-      top: 3.6rem;
+      margin-bottom: 0.75rem;
     }
     .devils-six h2 {
       font-size: 0.85rem;
@@ -142,24 +119,42 @@
       border-radius: 4px;
       position: relative;
     }
-    .footer {
-      padding: 1rem;
+    .controls {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.5rem;
+    }
+    .controls button {
+      background: #1b5c7c;
+      border: none;
+      color: #fff;
+      padding: 0.45rem 0.8rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
       font-size: 0.7rem;
-      opacity: 0.5;
+    }
+    .controls button:disabled {
+      background: rgba(255,255,255,0.15);
+      cursor: not-allowed;
+    }
+    .status {
+      font-size: 0.65rem;
+      opacity: 0.7;
+      min-height: 1rem;
+    }
+    .footer {
+      padding: 0.5rem 1rem 1rem;
+      font-size: 0.65rem;
+      opacity: 0.45;
     }
   </style>
 </head>
 <body>
-  <div class="top-bar">
-    <button id="newGameBtn">New Game</button>
-    <button id="dealBtn">Deal</button>
-    <span id="status"></span>
-  </div>
-
-  <div class="table">
+  <div class="layout">
     <div class="left-col">
-      <!-- Top row: stock / waste / foundations -->
-      <div class="row" id="topRow">
+      <div class="top-row" id="topRow">
         <div>
           <div class="pile-label">Stock</div>
           <div class="pile" id="stockPile"></div>
@@ -168,7 +163,7 @@
           <div class="pile-label">Waste</div>
           <div class="pile" id="wastePile"></div>
         </div>
-        <div style="display:flex; gap:0.5rem;">
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
           <div>
             <div class="pile-label">Foundation 1</div>
             <div class="pile" data-foundation="0"></div>
@@ -187,66 +182,57 @@
           </div>
         </div>
       </div>
-
-      <!-- Tableau -->
-      <div class="row">
-        <div class="tableau-row" id="tableauRow">
-          <!-- 6 tableau piles for Devil's Six -->
-        </div>
-      </div>
+      <div class="tableau-row" id="tableauRow"></div>
     </div>
-
     <div class="right-col">
       <div class="devils-six" id="devilsSixPanel">
         <h2>Devil's Six</h2>
-        <p style="font-size:0.65rem; opacity:0.7;">These must stay visible. Don’t block this with buttons.</p>
-        <div class="devil-slots" id="devilSlots">
-          <!-- 6 special cards -->
-        </div>
+        <div class="devil-slots" id="devilSlots"></div>
       </div>
+      <div class="controls">
+        <button id="newGameBtn">New Game</button>
+        <button id="dealBtn">Deal</button>
+      </div>
+      <div class="status" id="status"></div>
     </div>
   </div>
-
-  <div class="footer">
-    Devil's Six / Churchill Solitaire — working draft. This version enforces: (1) no dealing into king-anchored tableau, (2) only legal runs can move, (3) buttons moved off the Devil’s Six panel.
-  </div>
+  <div class="footer">Devil's Six – fixed single-file version. Buttons now live under the Devil's Six panel, away from long tableau stacks.</div>
 
   <script>
-    /****************************************************************
-     * Simple model
-     ****************************************************************/
-    const SUITS = ["♠","♥","♣","♦"];
+    // ====== BASIC CARD DATA ======
+    const SUITS = ["♠","♥","♣","♦"]; // spade, heart, club, diamond
     const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
 
     function createDeck() {
       const deck = [];
       for (let s = 0; s < SUITS.length; s++) {
         for (let r = 0; r < RANKS.length; r++) {
+          const suit = SUITS[s];
+          const rank = RANKS[r];
           deck.push({
-            id: SUITS[s] + RANKS[r],
-            suit: SUITS[s],
-            rank: RANKS[r],
+            id: suit + rank,
+            suit,
+            rank,
             value: r + 1,
-            color: (SUITS[s] === "♥" || SUITS[s] === "♦") ? "red" : "black"
+            color: (suit === "♥" || suit === "♦") ? "red" : "black"
           });
         }
       }
       return deck;
     }
 
-    function shuffle(array) {
-      for (let i = array.length - 1; i > 0; i--) {
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
+        [arr[i], arr[j]] = [arr[j], arr[i]];
       }
-      return array;
+      return arr;
     }
 
-    // GAME STATE
     const state = {
       stock: [],
       waste: [],
-      tableau: [], // array of arrays
+      tableau: [],
       foundations: [[],[],[],[]],
       devilsSix: [],
       dragging: null,
@@ -260,136 +246,106 @@
     const dealBtn = document.getElementById("dealBtn");
     const devilSlots = document.getElementById("devilSlots");
 
-    // init tableau HTML
+    // create 6 tableau piles in DOM
     for (let i = 0; i < 6; i++) {
       const t = document.createElement("div");
       t.className = "tableau";
-      t.dataset.index = i;
+      t.dataset.index = i.toString();
       tableauRow.appendChild(t);
     }
-    // init devil slots HTML
-    for (let i = 0; i < 6; i++) {
-      const s = document.createElement("div");
-      s.className = "devil-slot";
-      s.dataset.index = i;
-      devilSlots.appendChild(s);
-    }
 
-    function newGame() {
-      const deck = shuffle(createDeck());
-      // Devil's Six: first 6 cards (face-up)
-      state.devilsSix = deck.splice(0, 6);
-      // 6 tableau piles, start empty
-      state.tableau = [[],[],[],[],[],[]];
-      // stock is the rest
-      state.stock = deck;
-      state.waste = [];
-      state.foundations = [[],[],[],[]];
-      render();
-      setStatus("New game. Deal to start.");
+    // create 6 devil slots
+    for (let i = 0; i < 6; i++) {
+      const d = document.createElement("div");
+      d.className = "devil-slot";
+      d.dataset.index = i.toString();
+      devilSlots.appendChild(d);
     }
 
     function setStatus(msg) {
       statusEl.textContent = msg;
     }
 
-    /**
-     * DEAL LOGIC
-     * In your screenshot you said: "If a Tableau slot is anchored by a King then no new cards can be dealt into that slot!"
-     * Implementation: A tableau pile is considered *anchored by a king* if its BOTTOM card is a King.
-     * On deal we go left -> right through tableau piles and try to place 1 card from stock onto each NON-anchored pile.
-     */
+    function newGame() {
+      const deck = shuffle(createDeck());
+      // first 6 go to Devil's Six
+      state.devilsSix = deck.splice(0, 6);
+      // tableau empty
+      state.tableau = [[],[],[],[],[],[]];
+      // rest is stock
+      state.stock = deck;
+      state.waste = [];
+      state.foundations = [[],[],[],[]];
+      render();
+      setStatus("New game. Hit Deal to start.");
+    }
+
     function deal() {
       if (state.stock.length === 0) {
         setStatus("No more cards in stock.");
         return;
       }
-      // Deal up to 6 cards, skipping king-anchored piles
+      // try to deal up to 6 cards, skip king-anchored piles
       for (let i = 0; i < 6; i++) {
         if (state.stock.length === 0) break;
         const pile = state.tableau[i];
-        const anchoredByKing = pile.length > 0 && pile[0].rank === "K"; // bottom card
+        const anchoredByKing = pile.length > 0 && pile[0].rank === "K";
         if (anchoredByKing) {
-          // skip
-          continue;
+          continue; // do not deal to this pile
         }
         const card = state.stock.pop();
-        // push to TOP of tableau (i.e. end of array for render stacking)
         pile.push(card);
       }
       render();
       setStatus("Dealt.");
     }
 
-    // check if a run starting at index k in pile is a legal moving run
-    // We will enforce: descending by 1 AND alternating colors
+    // validate that a sequence from index k in a pile is a legal run (descending by 1, alternating color)
     function isLegalRun(pile, startIndex) {
       for (let i = startIndex; i < pile.length - 1; i++) {
         const upper = pile[i];
         const lower = pile[i + 1];
-        // must be value -1
         if (upper.value !== lower.value + 1) return false;
-        // must alternate color
         if (upper.color === lower.color) return false;
       }
       return true;
     }
 
-    // check if run can be dropped on target tableau pile
     function canDropRun(run, targetPile) {
-      if (targetPile.length === 0) {
-        // usually can drop anything on empty
-        return true;
-      }
+      if (targetPile.length === 0) return true; // empty tableau can take anything
       const targetTop = targetPile[targetPile.length - 1];
       const runFirst = run[0];
-      // to drop, targetTop must be exactly 1 higher and opposite color
-      if (targetTop.value === runFirst.value + 1 && targetTop.color !== runFirst.color) {
-        return true;
-      }
-      return false;
+      return (targetTop.value === runFirst.value + 1 && targetTop.color !== runFirst.color);
     }
 
-    // drag handlers
-    function handleCardMouseDown(e, pileIndex, cardIndex, location) {
-      // location: "tableau", "waste", etc.
-      // Only allow tableau multi-card drags from a LEGAL run
-      let run = [];
-      if (location === "tableau") {
-        const pile = state.tableau[pileIndex];
-        if (!isLegalRun(pile, cardIndex)) {
-          // if not legal, only allow dragging the top card
-          if (cardIndex !== pile.length - 1) {
-            setStatus("Illegal run. You can't move blocked cards.");
-            return;
-          }
+    function handleCardMouseDown(e, pileIndex, cardIndex) {
+      const pile = state.tableau[pileIndex];
+      // enforce legality: if user is trying to drag from middle, that subsequence must be legal
+      if (!isLegalRun(pile, cardIndex)) {
+        // allow dragging only the last card
+        if (cardIndex !== pile.length - 1) {
+          setStatus("Illegal run — a card in the middle breaks sequence.");
+          return;
         }
-        // grab run from cardIndex to end
-        run = pile.slice(cardIndex);
-        state.dragSource = { location, pileIndex, cardIndex };
-        state.dragging = run;
-      } else {
-        // for now only tableau drag
-        return;
       }
+      const run = pile.slice(cardIndex);
+      state.dragSource = { pileIndex, cardIndex };
+      state.dragging = run;
       document.addEventListener("mousemove", onDragMove);
       document.addEventListener("mouseup", onDragEnd);
-      // mark DOM
       e.currentTarget.classList.add("dragging");
     }
 
     function onDragMove(e) {
-      // we're not doing visual follow-the-mouse for each card here to keep it minimal
-      // but we CAN highlight tableau piles as potential drops
-      const elements = document.elementsFromPoint(e.clientX, e.clientY);
+      const under = document.elementsFromPoint ? document.elementsFromPoint(e.clientX, e.clientY) : [];
       document.querySelectorAll(".tableau").forEach(t => t.classList.remove("highlight-drop"));
-      const target = elements.find(el => el.classList && el.classList.contains("tableau"));
-      if (target && state.dragging) {
-        const targetIndex = parseInt(target.dataset.index, 10);
-        const targetPile = state.tableau[targetIndex];
-        if (canDropRun(state.dragging, targetPile)) {
-          target.classList.add("highlight-drop");
-        }
+      if (!state.dragging || under.length === 0) return;
+      const target = under.find(el => el.classList && el.classList.contains("tableau"));
+      if (!target) return;
+      const idx = parseInt(target.dataset.index, 10);
+      const targetPile = state.tableau[idx];
+      if (canDropRun(state.dragging, targetPile)) {
+        target.classList.add("highlight-drop");
       }
     }
 
@@ -397,10 +353,9 @@
       document.removeEventListener("mousemove", onDragMove);
       document.removeEventListener("mouseup", onDragEnd);
       document.querySelectorAll(".card.dragging").forEach(c => c.classList.remove("dragging"));
-      const elements = document.elementsFromPoint(e.clientX, e.clientY);
-      const target = elements.find(el => el.classList && el.classList.contains("tableau"));
-      if (!target || !state.dragging) {
-        // drop canceled
+      const under = document.elementsFromPoint ? document.elementsFromPoint(e.clientX, e.clientY) : [];
+      const target = under.find(el => el.classList && el.classList.contains("tableau"));
+      if (!target || !state.dragging || !state.dragSource) {
         state.dragging = null;
         state.dragSource = null;
         document.querySelectorAll(".tableau").forEach(t => t.classList.remove("highlight-drop"));
@@ -415,7 +370,6 @@
         document.querySelectorAll(".tableau").forEach(t => t.classList.remove("highlight-drop"));
         return;
       }
-      // perform move
       const { pileIndex, cardIndex } = state.dragSource;
       const sourcePile = state.tableau[pileIndex];
       const moved = sourcePile.splice(cardIndex);
@@ -427,19 +381,32 @@
       setStatus("Moved.");
     }
 
+    function makeCardEl(card) {
+      const div = document.createElement("div");
+      div.className = "card" + (card.color === "red" ? " red" : "");
+      div.textContent = card.rank + card.suit;
+      return div;
+    }
+
+    function makeCardBack(count) {
+      const div = document.createElement("div");
+      div.className = "card";
+      div.style.background = "#123652";
+      div.style.color = "#fff";
+      div.textContent = count + "🂠";
+      return div;
+    }
+
     function render() {
       // stock
       stockPile.innerHTML = "";
       if (state.stock.length > 0) {
-        const c = makeCardBack(state.stock.length);
-        stockPile.appendChild(c);
+        stockPile.appendChild(makeCardBack(state.stock.length));
       }
-      // waste
+      // waste (not wired to gameplay yet)
       wastePile.innerHTML = "";
       if (state.waste.length > 0) {
-        const top = state.waste[state.waste.length - 1];
-        const el = makeCardEl(top);
-        wastePile.appendChild(el);
+        wastePile.appendChild(makeCardEl(state.waste[state.waste.length - 1]));
       }
       // foundations
       document.querySelectorAll("[data-foundation]").forEach(el => {
@@ -447,19 +414,18 @@
         el.innerHTML = "";
         const pile = state.foundations[idx];
         if (pile.length > 0) {
-          const top = pile[pile.length - 1];
-          el.appendChild(makeCardEl(top));
+          el.appendChild(makeCardEl(pile[pile.length - 1]));
         }
       });
       // tableau
       for (let i = 0; i < 6; i++) {
-        const t = document.querySelector('.tableau[data-index="'+i+'"]');
+        const t = document.querySelector('.tableau[data-index="' + i + '"]');
         t.innerHTML = "";
         const pile = state.tableau[i];
         pile.forEach((card, idx) => {
           const el = makeCardEl(card);
           el.style.top = (idx * 25) + "px";
-          el.addEventListener("mousedown", (e) => handleCardMouseDown(e, i, idx, "tableau"));
+          el.addEventListener("mousedown", (e) => handleCardMouseDown(e, i, idx));
           t.appendChild(el);
         });
       }
@@ -474,24 +440,8 @@
           slot.appendChild(el);
         }
       });
-
-      // deal button enable/disable
+      // deal button state
       dealBtn.disabled = state.stock.length === 0;
-    }
-
-    function makeCardEl(card) {
-      const div = document.createElement("div");
-      div.className = "card " + (card.color === "red" ? "red" : "");
-      div.textContent = card.rank + card.suit;
-      return div;
-    }
-    function makeCardBack(count) {
-      const div = document.createElement("div");
-      div.className = "card";
-      div.style.background = "#123652";
-      div.style.color = "#fff";
-      div.textContent = count + "🂠";
-      return div;
     }
 
     document.getElementById("newGameBtn").addEventListener("click", newGame);
