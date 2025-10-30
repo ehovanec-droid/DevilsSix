@@ -128,6 +128,9 @@
   let career = +localStorage.getItem('careerScore') || 0;
   document.getElementById('careerScore').textContent = career;
 
+  // ★ NEW: track which tableau columns have had a king planted
+  let anchoredCols = new Array(10).fill(false);
+
   let CARD_W = 80, CARD_H = 120, OVERLAP = 26;
 
   const TopGeom = {
@@ -359,18 +362,7 @@
     return true;
   }
 
-  // ★ FIXED: use your original definition (King + no face-down cards)
-  function isKingAnchored(col){
-    if (!col.length) return false;
-    const top = col[col.length - 1];
-    if (!(top.faceUp && top.value === 13)) return false;
-    // check that the entire column is exposed
-    for (let i = 0; i < col.length; i++){
-      if (!col[i].faceUp) return false;
-    }
-    return true;
-  }
-
+  // ===== DEAL =====
   function doDeal(){
     if (!stock.length) {
       draw();
@@ -378,9 +370,10 @@
       return;
     }
 
+    // if ALL columns are anchored-by-king, don't deal
     let allAnchored = true;
     for (let c=0;c<10;c++){
-      if (!isKingAnchored(tableau[c])) {
+      if (!anchoredCols[c]) {
         allAnchored = false;
         break;
       }
@@ -394,9 +387,10 @@
     const dealt = [];
     for (let c=0;c<10;c++){
       if (!stock.length) break;
-      const col = tableau[c];
-      if (isKingAnchored(col)) continue;
+      // ★ skip permanently anchored columns
+      if (anchoredCols[c]) continue;
 
+      const col = tableau[c];
       const card = stock.pop();
       if (!card) break;
       card.faceUp = true;
@@ -486,6 +480,8 @@
     foundations = new Array(8).fill(0).map(()=>[]);
     stock = [];
     undoStack = [];
+    // ★ reset anchored columns
+    anchoredCols = new Array(10).fill(false);
 
     for (let i=0;i<6;i++){
       const c = deck.pop();
@@ -656,6 +652,7 @@
     let moved = false;
 
     if (drop){
+      // to foundation
       if (drop.type === 'foundation' && drag.cards.length === 1 && canPlaceOnFoundation(moving, drop.idx)){
         foundations[drop.idx].push(moving);
         if (drag.from.type === 'tableau'){
@@ -667,12 +664,34 @@
         undoStack.push({kind:'toFound', from:JSON.parse(JSON.stringify(drag.from)), fIdx:drop.idx, card:moving});
         moved = true;
       }
+      // tableau-to-tableau
       else if (drop.type === 'tableau' && drag.from.type === 'tableau' && canPlaceOnTableau(moving, drop.col)){
         const run = drag.cards.slice();
-        tableau[drop.col].push(...run);
-        tableau[drag.from.col].splice(drag.from.idx, run.length);
-        flipTop(drag.from.col);
-        undoStack.push({kind:'tab2tab', from:{col:drag.from.col, idx:drag.from.idx}, toCol:drop.col, count:run.length});
+        const toCol = drop.col;
+        const fromCol = drag.from.col;
+
+        const wasAnchoredBefore = anchoredCols[toCol]; // ★ capture old state
+
+        tableau[toCol].push(...run);
+        tableau[fromCol].splice(drag.from.idx, run.length);
+        flipTop(fromCol);
+
+        // ★ if we placed a KING onto an EMPTY column, per your rule, anchor it forever
+        if (wasAnchoredBefore === false && tableau[toCol].length === run.length) {
+          // column was empty before this move
+          if (run[0].faceUp && run[0].value === 13) {
+            anchoredCols[toCol] = true;
+          }
+        }
+
+        undoStack.push({
+          kind:'tab2tab',
+          from:{col:fromCol, idx:drag.from.idx},
+          toCol:toCol,
+          count:run.length,
+          // ★ store previous anchor state so undo can restore it
+          prevAnchored: wasAnchoredBefore
+        });
         moved = true;
       }
     }
@@ -701,6 +720,10 @@
       const moved = tableau[step.toCol].splice(-step.count, step.count);
       tableau[step.from.col].splice(step.from.idx, 0, ...moved);
       flipTop(step.from.col);
+      // ★ restore anchored flag for target column
+      if (typeof step.prevAnchored === 'boolean') {
+        anchoredCols[step.toCol] = step.prevAnchored;
+      }
     } else if (step.kind === 'toFound'){
       const card = foundations[step.fIdx].pop();
       if (step.from.type === 'tableau'){
