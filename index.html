@@ -374,18 +374,43 @@
 
   // ===== DEAL =====
   function doDeal(){
+    // hard guard: if no stock, just bail — prevents repeated expensive checks
     if (!stock.length) return;
+    // second guard: if *all* tableau piles are king-anchored, there is nothing to deal -> return
+    let allAnchored = true;
+    for (let c=0;c<10;c++){
+      const col = tableau[c];
+      const top = col[col.length-1];
+      if (!(top && top.faceUp && top.value === 13)) { allAnchored = false; break; }
+    }
+    if (allAnchored) return;
+
     const dealt = [];
     for (let c=0;c<10;c++){
+      if (!stock.length) break; // stop immediately if stock emptied mid-pass
       const col = tableau[c];
       const top = col[col.length-1];
       const anchoredByKing = !!top && top.faceUp && top.value === 13;
       if (anchoredByKing) continue;
-      if (!stock.length) break;
       const card = stock.pop();
+      if (!card) break; // extra safety
       card.faceUp = true;
       col.push(card);
       dealt.push({col:c, card});
+    }
+    if (!dealt.length) {
+      // nothing was actually dealt — do NOT push to undo, do NOT bump deals
+      draw();
+      updateUI();
+      return;
+    }
+    deals++;
+    document.getElementById('deals').textContent = deals;
+    undoStack.push({kind:'deal', payload:dealt});
+    draw();
+    updateUI();
+    checkWinOrStuck();
+  });
     }
     if (dealt.length){
       deals++; document.getElementById('deals').textContent = deals;
