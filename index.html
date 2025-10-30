@@ -73,17 +73,33 @@
   function layout(){ const w=canvas.getBoundingClientRect().width; CARD_W=Math.max(60, Math.min(90, Math.floor((w-PADDING*2)/14))); CARD_H=Math.floor(CARD_W*1.5); OVERLAP=Math.floor(CARD_H*0.30); }
   function gutter(){ const w=canvas.getBoundingClientRect().width; const available=w-PADDING*2-CARD_W*10; return Math.max(6, Math.floor(available/9)); }
   function colX(col){ return PADDING + col*(CARD_W + gutter()); }
-  function tableauTopY(){ return CARD_H + 56; }
+  function tableauTopY(){
+    // Push tableau below the 2x4 foundation block with a small margin
+    const top = TopGeom.fY + (CARD_H * TopGeom.fRows) + (TopGeom.fGapY * (TopGeom.fRows - 1)) + 24;
+    return Math.max(top, CARD_H + 56);
+  }
 
-  const TopGeom = { dsX:0, dsY:0, dsGap:8, stockX:0, stockY:0, fStartX:0, fY:0, fStep:0, fGap:12, fWidth:0 };
+  const TopGeom = { dsX:0, dsY:0, dsStep:0, stockX:0, stockY:0, fY:0, fCols:4, fRows:2, fGapX:12, fGapY:10, fSlots:[], fBlockW:0, fBlockH:0 };
   function computeTopGeometry(){
     const r = canvas.getBoundingClientRect();
-    TopGeom.dsX=PADDING; TopGeom.dsY=PADDING; TopGeom.dsGap=8; const dsWidth=6*(CARD_W+TopGeom.dsGap)-TopGeom.dsGap; TopGeom.stockX=TopGeom.dsX+dsWidth+16; TopGeom.stockY=TopGeom.dsY;
-    const minStart = TopGeom.stockX + CARD_W + 20; // to the right of stock
-    let avail = (r.width - PADDING) - (minStart + CARD_W*8); // space for 7 gaps
-    let dynamicGap = Math.floor(avail/7); if(!isFinite(dynamicGap) || isNaN(dynamicGap)) dynamicGap=0; if(dynamicGap<0) dynamicGap=0;
-    TopGeom.fGap=dynamicGap; TopGeom.fStep=CARD_W+TopGeom.fGap; TopGeom.fY=PADDING; TopGeom.fWidth=CARD_W*8+TopGeom.fGap*7;
-    const centeredStart = Math.floor((r.width - TopGeom.fWidth)/2); TopGeom.fStartX=Math.max(minStart, centeredStart); const maxStart=r.width-PADDING-TopGeom.fWidth; if(TopGeom.fStartX>maxStart) TopGeom.fStartX=Math.max(minStart, maxStart);
+    // Devil's Six at top-left with slight horizontal overlap (stacked aesthetic)
+    TopGeom.dsX = PADDING; TopGeom.dsY = PADDING; TopGeom.dsStep = Math.max( Math.floor(CARD_W * 0.68), 36 );
+    const dsVisualWidth = CARD_W + (6-1) * TopGeom.dsStep;
+    TopGeom.stockX = TopGeom.dsX + dsVisualWidth + 16; TopGeom.stockY = TopGeom.dsY;
+
+    // Foundations as 2 rows x 4 cols, anchored to top-right
+    TopGeom.fCols = 4; TopGeom.fRows = 2; TopGeom.fGapX = 12; TopGeom.fGapY = 10; TopGeom.fY = PADDING;
+    TopGeom.fBlockW = TopGeom.fCols * CARD_W + (TopGeom.fCols - 1) * TopGeom.fGapX;
+    TopGeom.fBlockH = TopGeom.fRows * CARD_H + (TopGeom.fRows - 1) * TopGeom.fGapY;
+    const startX = Math.max(TopGeom.stockX + CARD_W + 20, r.width - PADDING - TopGeom.fBlockW);
+    TopGeom.fSlots = [];
+    for(let row=0; row<TopGeom.fRows; row++){
+      for(let col=0; col<TopGeom.fCols; col++){
+        const x = startX + col * (CARD_W + TopGeom.fGapX);
+        const y = TopGeom.fY + row * (CARD_H + TopGeom.fGapY);
+        TopGeom.fSlots.push({x,y});
+      }
+    }
   }
 
   // --- Setup ---
@@ -104,10 +120,10 @@
 
   function draw(){ layout(); computeTopGeometry(); const r=canvas.getBoundingClientRect(); ctx.clearRect(0,0,r.width,r.height);
     // DS and Stock
-    for(let i=0;i<devilsSix.length;i++) drawCard(devilsSix[i], TopGeom.dsX + i*(CARD_W+TopGeom.dsGap), TopGeom.dsY);
+    for(let i=0;i<devilsSix.length;i++) drawCard(devilsSix[i], TopGeom.dsX + i*TopGeom.dsStep, TopGeom.dsY);
     drawCard(stock.length? {faceUp:false}: null, TopGeom.stockX, TopGeom.stockY); stockHitRect={x:TopGeom.stockX, y:TopGeom.stockY, w:CARD_W, h:CARD_H};
     // Foundations
-    for(let i=0;i<8;i++){ const stack=foundations[i]; const top=stack[stack.length-1]||null; drawCard(top, TopGeom.fStartX + i*TopGeom.fStep, TopGeom.fY, {emptyHint:!top, foundationSuit:SUITS[i%4]}); }
+    for(let i=0;i<8;i++){ const stack=foundations[i]; const top=stack[stack.length-1]||null; const slot=TopGeom.fSlots[i]; drawCard(top, slot.x, slot.y, {emptyHint:!top, foundationSuit:SUITS[i%4]}); }
     // Tableau
     const tY=tableauTopY(); for(let c=0;c<10;c++){ const x=colX(c); if(tableau[c].length===0) drawCard(null,x,tY); else for(let i=0;i<tableau[c].length;i++){ const card=tableau[c][i]; if(drag && drag.from.type==='tableau' && drag.from.col===c && i>=drag.from.idx) continue; drawCard(card, x, tY + i*OVERLAP); } }
     // Drag visuals
@@ -118,9 +134,9 @@
   let mouseX=0, mouseY=0; let stockHitRect={x:0,y:0,w:0,h:0};
   canvas.addEventListener('mousemove', e=>{ const r=canvas.getBoundingClientRect(); mouseX=e.clientX-r.left; mouseY=e.clientY-r.top; if(drag) draw(); });
   function cardAt(x,y){ computeTopGeometry(); // Foundations
-    for(let i=0;i<8;i++){ const fx=TopGeom.fStartX + i*TopGeom.fStep, fy=TopGeom.fY; if(x>fx && x<fx+CARD_W && y>fy && y<fy+CARD_H) return {type:'foundation', idx:i}; }
+    for(let i=0;i<8;i++){ const slot=TopGeom.fSlots[i]; const fx=slot.x, fy=slot.y; if(x>fx && x<fx+CARD_W && y>fy && y<fy+CARD_H) return {type:'foundation', idx:i}; }
     // DS
-    for(let i=0;i<devilsSix.length;i++){ const dx=TopGeom.dsX + i*(CARD_W+TopGeom.dsGap), dy=TopGeom.dsY; if(x>dx&&x<dx+CARD_W&&y>dy&&y<dy+CARD_H) return {type:'devils', idx:i}; }
+    for(let i=0;i<devilsSix.length;i++){ const dx=TopGeom.dsX + i*TopGeom.dsStep, dy=TopGeom.dsY; if(x>dx&&x<dx+CARD_W&&y>dy&&y<dy+CARD_H) return {type:'devils', idx:i}; }
     // Stock
     if(stock.length && x>stockHitRect.x && x<stockHitRect.x+CARD_W && y>stockHitRect.y && y<stockHitRect.y+CARD_H) return {type:'stock'};
     // Tableau
