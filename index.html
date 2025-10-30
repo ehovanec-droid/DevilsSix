@@ -388,7 +388,12 @@
 
   // ===== DEAL =====
   function doDeal(){
-    if (!stock.length) return;
+    // --- FIX 1: if stock is empty, still refresh UI so the button reflects it
+    if (!stock.length) {
+      draw();
+      updateUI();
+      return;
+    }
 
     // if all columns are king-anchored, no deal
     let allAnchored = true;
@@ -400,7 +405,13 @@
         break;
       }
     }
-    if (allAnchored) return;
+
+    // --- FIX 2: if all anchored, also refresh UI
+    if (allAnchored) {
+      draw();
+      updateUI();
+      return;
+    }
 
     const dealt = [];
     for (let c=0;c<10;c++){
@@ -825,3 +836,4 @@
   </script>
 </body>
 </html>
+
