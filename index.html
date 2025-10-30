@@ -96,18 +96,16 @@
   <canvas id="game"></canvas>
 
   <script>
-  // ===== CONSTANTS =====
   const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
-  const SUITS = ['\u2660','\u2665','\u2666','\u2663']; // ♠ ♥ ♦ ♣
+  const SUITS = ['\u2660','\u2665','\u2666','\u2663'];
   const COLORS = { '\u2660':'black', '\u2663':'black', '\u2665':'red', '\u2666':'red' };
   const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
   const RVAL  = { A:1, J:11, Q:12, K:13 };
   for (let i=2;i<=10;i++) RVAL[i]=i;
   const PADDING = 16;
 
-  // ===== CARD CLASS =====
   class Card {
     constructor(suit, rank){
       this.suit = suit;
@@ -118,7 +116,6 @@
     }
   }
 
-  // ===== STATE =====
   let tableau = new Array(10).fill(0).map(()=>[]);
   let devilsSix = [];
   let foundations = new Array(8).fill(0).map(()=>[]);
@@ -131,10 +128,8 @@
   let career = +localStorage.getItem('careerScore') || 0;
   document.getElementById('careerScore').textContent = career;
 
-  // draw sizes
   let CARD_W = 80, CARD_H = 120, OVERLAP = 26;
 
-  // top-band layout
   const TopGeom = {
     dsX: PADDING,
     dsY: PADDING,
@@ -149,7 +144,6 @@
     fY: PADDING
   };
 
-  // ===== LAYOUT =====
   function layout(){
     const w = canvas.getBoundingClientRect().width;
     CARD_W = Math.max(58, Math.min(90, Math.floor((w - PADDING*2)/14)));
@@ -175,9 +169,6 @@
     TopGeom.stockX = TopGeom.dsX + dsVisualWidth + 14;
     TopGeom.stockY = TopGeom.dsY;
 
-    // 2x4 foundations right-aligned
-    TopGeom.fCols = 4; TopGeom.fRows = 2;
-    TopGeom.fGapX = 10; TopGeom.fGapY = 8; TopGeom.fY = PADDING;
     const totalFW = TopGeom.fCols*CARD_W + (TopGeom.fCols-1)*TopGeom.fGapX;
     const startX = Math.max(TopGeom.stockX + CARD_W + 18, r.width - PADDING - totalFW);
     TopGeom.fSlots = [];
@@ -194,7 +185,6 @@
     const r = canvas.getBoundingClientRect();
     const dsRight = TopGeom.dsX + CARD_W + (6-1)*TopGeom.dsStep;
     const uiWidth = ui.getBoundingClientRect().width;
-    // to the right of DS if it fits
     if (dsRight + 14 + uiWidth < r.width - 260) {
       ui.style.left = (dsRight + 14) + 'px';
       ui.style.top = (TopGeom.dsY + 2) + 'px';
@@ -215,7 +205,6 @@
   }
   window.addEventListener('resize', resizeCanvas);
 
-  // ===== DRAWING =====
   let stockHit = {x:0,y:0,w:0,h:0};
   let drag = null;
   let mouseX = 0, mouseY = 0;
@@ -267,15 +256,12 @@
     const r = canvas.getBoundingClientRect();
     ctx.clearRect(0,0,r.width,r.height);
 
-    // devils six
     for (let i=0;i<devilsSix.length;i++){
       drawCard(devilsSix[i], TopGeom.dsX + i*TopGeom.dsStep, TopGeom.dsY);
     }
-    // stock
     drawCard(stock.length ? {faceUp:false} : null, TopGeom.stockX, TopGeom.stockY);
     stockHit = {x:TopGeom.stockX, y:TopGeom.stockY, w:CARD_W, h:CARD_H};
 
-    // foundations
     for (let i=0;i<8;i++){
       const slot = TopGeom.fSlots[i];
       const stack = foundations[i];
@@ -283,7 +269,6 @@
       drawCard(top, slot.x, slot.y, {empty:!top, suitHint:SUITS[i%4]});
     }
 
-    // tableau
     const tY = tableauTopY();
     for (let c=0;c<10;c++){
       const x = colX(c);
@@ -299,7 +284,6 @@
       }
     }
 
-    // drag
     if (drag){
       for (let i=0;i<drag.cards.length;i++){
         drawCard(drag.cards[i], mouseX - CARD_W/2, mouseY - CARD_H/2 + i*OVERLAP, {ghost:true,highlight:true});
@@ -307,25 +291,20 @@
     }
   }
 
-  // ===== HITTEST =====
   function hitAt(x,y){
-    // foundations
     for (let i=0;i<8;i++){
       const s = TopGeom.fSlots[i];
       if (x>s.x && x<s.x+CARD_W && y>s.y && y<s.y+CARD_H)
         return {type:'foundation', idx:i};
     }
-    // devils
     for (let i=0;i<devilsSix.length;i++){
       const dx = TopGeom.dsX + i*TopGeom.dsStep, dy=TopGeom.dsY;
       if (x>dx && x<dx+CARD_W && y>dy && y<dy+CARD_H)
         return {type:'devils', idx:i};
     }
-    // stock
     if (stock.length && x>stockHit.x && x<stockHit.x+CARD_W && y>stockHit.y && y<stockHit.y+CARD_H)
       return {type:'stock'};
 
-    // tableau
     const tY = tableauTopY();
     for (let c=0;c<10;c++){
       const cx = colX(c);
@@ -343,7 +322,6 @@
     return null;
   }
 
-  // ===== RULES =====
   function getRunLength(col, start){
     const arr = tableau[col];
     let len = 1;
@@ -381,24 +359,25 @@
     return true;
   }
 
-  // ===== KING-ANCHOR CHECK (single source of truth) =====
+  // ★ FIXED: use your original definition (King + no face-down cards)
   function isKingAnchored(col){
     if (!col.length) return false;
     const top = col[col.length - 1];
-    // rule we just agreed on: TOP face-up King = anchored
-    return !!top && top.faceUp && top.value === 13;
+    if (!(top.faceUp && top.value === 13)) return false;
+    // check that the entire column is exposed
+    for (let i = 0; i < col.length; i++){
+      if (!col[i].faceUp) return false;
+    }
+    return true;
   }
 
-  // ===== DEAL =====
   function doDeal(){
-    // if no stock, just refresh
     if (!stock.length) {
       draw();
       updateUI();
       return;
     }
 
-    // if ALL columns are king-anchored, don't deal at all
     let allAnchored = true;
     for (let c=0;c<10;c++){
       if (!isKingAnchored(tableau[c])) {
@@ -416,7 +395,6 @@
     for (let c=0;c<10;c++){
       if (!stock.length) break;
       const col = tableau[c];
-      // skip anchored columns (top is face-up king)
       if (isKingAnchored(col)) continue;
 
       const card = stock.pop();
@@ -440,19 +418,15 @@
     checkWinOrStuck();
   }
 
-  // ===== GAME CHECKS =====
   function hasAnyMoves(){
-    // to foundation from tableau
     for (let c=0;c<10;c++){
       const top = tableau[c][tableau[c].length-1];
       if (!top) continue;
       for (let f=0;f<8;f++) if (canPlaceOnFoundation(top,f)) return true;
     }
-    // from devil's six
     for (const card of devilsSix){
       for (let f=0;f<8;f++) if (canPlaceOnFoundation(card,f)) return true;
     }
-    // tableau-to-tableau
     for (let from=0;from<10;from++){
       const col = tableau[from];
       const start = col.findIndex(c=>c.faceUp);
@@ -490,7 +464,6 @@
     }
   }
 
-  // ===== NEW GAME =====
   function buildDeck(){
     const temp = [];
     for (let d=0; d<2; d++){
@@ -500,7 +473,6 @@
         }
       }
     }
-    // shuffle
     for (let i=temp.length-1; i>0; i--){
       const j = Math.floor(Math.random()*(i+1));
       [temp[i], temp[j]] = [temp[j], temp[i]];
@@ -515,14 +487,12 @@
     stock = [];
     undoStack = [];
 
-    // Devil's Six
     for (let i=0;i<6;i++){
       const c = deck.pop();
       c.faceUp = true;
       devilsSix.push(c);
     }
 
-    // tableau pattern
     const downs = [0,1,2,3,4,4,3,2,1,0];
     for (let col=0; col<10; col++){
       for (let d=0; d<downs[col]; d++){
@@ -535,7 +505,6 @@
       tableau[col].push(up);
     }
 
-    // remaining is stock
     stock = deck;
     deals = 0;
     document.getElementById('deals').textContent = deals;
@@ -553,7 +522,6 @@
     draw();
   }
 
-  // ===== UI / MESSAGE =====
   function updateUI(disable=false){
     document.getElementById('deal').disabled = disable || stock.length===0;
     document.getElementById('undo').disabled = disable || undoStack.length===0;
@@ -567,7 +535,6 @@
   }
   function hideMessage(){ document.getElementById('message').style.display = 'none'; }
 
-  // ===== EVENTS =====
   canvas.addEventListener('mousemove', e=>{
     const r = canvas.getBoundingClientRect();
     mouseX = e.clientX - r.left;
@@ -582,17 +549,14 @@
     const hit = hitAt(mouseX, mouseY);
     if (!hit) return;
 
-    // stock click
     if (hit.type === 'stock'){
       doDeal();
       return;
     }
 
-    // click-to-foundation for tableau A
     if (hit.type === 'tableau' && hit.row >= 0){
       const card = tableau[hit.col][hit.row];
       if (card && card.faceUp && card.value === 1){
-        // try to place on matching suit foundation
         const candidates = [];
         for (let f=0;f<8;f++) if (SUITS[f%4] === card.suit) candidates.push(f);
         let placed = false;
@@ -627,7 +591,6 @@
       }
     }
 
-    // click-to-foundation for Devil's Six A
     if (hit.type === 'devils'){
       const card = devilsSix[hit.idx];
       if (card && card.value === 1){
@@ -663,7 +626,6 @@
       }
     }
 
-    // start drag from tableau
     if (hit.type === 'tableau'){
       if (hit.row < 0) return;
       if (!canStartDragAt(hit.col, hit.row)) return;
@@ -676,7 +638,6 @@
       return;
     }
 
-    // start drag from devils
     if (hit.type === 'devils'){
       const card = devilsSix[hit.idx];
       drag = {from:{type:'devils', idx:hit.idx}, cards:[card]};
@@ -695,7 +656,6 @@
     let moved = false;
 
     if (drop){
-      // to foundation
       if (drop.type === 'foundation' && drag.cards.length === 1 && canPlaceOnFoundation(moving, drop.idx)){
         foundations[drop.idx].push(moving);
         if (drag.from.type === 'tableau'){
@@ -707,7 +667,6 @@
         undoStack.push({kind:'toFound', from:JSON.parse(JSON.stringify(drag.from)), fIdx:drop.idx, card:moving});
         moved = true;
       }
-      // tableau-to-tableau
       else if (drop.type === 'tableau' && drag.from.type === 'tableau' && canPlaceOnTableau(moving, drop.col)){
         const run = drag.cards.slice();
         tableau[drop.col].push(...run);
@@ -726,7 +685,6 @@
     }
   });
 
-  // ===== UNDO =====
   document.getElementById('undo').addEventListener('click', ()=>{
     if (!undoStack.length) return;
     const step = undoStack.pop();
@@ -755,11 +713,8 @@
     updateUI();
   });
 
-  // ===== HINT =====
   function hint(){
-    // non-destructive visual hint only
     const tY = tableauTopY();
-    // 1) tableau -> foundation
     for (let c=0;c<10;c++){
       const col = tableau[c];
       const top = col[col.length-1];
@@ -771,7 +726,6 @@
         }
       }
     }
-    // 2) devil -> foundation
     for (let i=0;i<devilsSix.length;i++){
       const card = devilsSix[i];
       for (let f=0;f<8;f++){
@@ -781,7 +735,6 @@
         }
       }
     }
-    // 3) tableau -> tableau
     for (let from=0;from<10;from++){
       const col = tableau[from];
       for (let i=0;i<col.length;i++){
@@ -806,13 +759,11 @@
     },120);
   }
 
-  // ===== BUTTONS =====
   document.getElementById('newGame').addEventListener('click', ()=>{ hideMessage(); newGame(); });
   document.getElementById('deal').addEventListener('click', doDeal);
   document.getElementById('hint').addEventListener('click', hint);
   document.getElementById('playAgain').addEventListener('click', ()=>{ hideMessage(); newGame(); });
 
-  // ===== LIGHTWEIGHT TESTS =====
   function runTests(){
     const results = [];
     results.push(['8 foundations', Array.isArray(foundations) && foundations.length === 8]);
@@ -828,11 +779,9 @@
     }
   }
 
-  // ===== BOOT =====
   resizeCanvas();
   newGame();
   runTests();
   </script>
 </body>
 </html>
-
