@@ -2,503 +2,293 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Devil's Six / Churchill Solitaire – Work-in-Progress</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Churchill Solitaire — Devil's Six</title>
   <style>
-    :root {
-      --bg: #0b1723;
-      --felt: #0f3b2a;
-      --card: #fff;
-      --card-border: #d7d7d7;
-      --accent: #f6b700;
-    }
+    html, body { height: 100%; margin: 0; }
     body {
-      margin: 0;
-      background: var(--bg);
+      background: radial-gradient(ellipse at center, #0e6a30 0%, #06421d 70%);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
       color: #fff;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-    .top-bar {
-      display: flex;
-      gap: 0.5rem;
-      padding: 0.75rem 1rem;
-      background: rgba(0,0,0,0.35);
-      align-items: center;
-      position: sticky;
-      top: 0;
-      z-index: 5;
-    }
-    button {
-      background: #1b5c7c;
-      border: none;
-      color: #fff;
-      padding: 0.45rem 0.8rem;
-      border-radius: 4px;
-      cursor: pointer;
-      font-weight: 600;
-    }
-    button:disabled {
-      background: rgba(255,255,255,0.15);
-      cursor: not-allowed;
-    }
-    .table {
-      display: flex;
-      gap: 1rem;
-      padding: 1rem;
-    }
-    .left-col {
-      flex: 1 1 auto;
-    }
-    .right-col {
-      width: 260px;
-    }
-    .row {
-      display: flex;
-      gap: 1rem;
-      margin-bottom: 1rem;
-    }
-    .pile-label {
-      font-size: 0.6rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 0.25rem;
-      opacity: 0.55;
-    }
-    .pile {
-      width: 90px;
-      min-height: 125px;
-      background: rgba(255,255,255,0.04);
-      border: 1px dashed rgba(255,255,255,0.07);
-      border-radius: 6px;
-      position: relative;
-    }
-    .tableau-row {
-      display: flex;
-      gap: 0.75rem;
-    }
-    .tableau {
-      width: 110px;
-      min-height: 130px;
-      background: rgba(0,0,0,0.14);
-      border: 1px solid rgba(255,255,255,0.05);
-      border-radius: 6px;
-      position: relative;
-    }
-    .card {
-      width: 80px;
-      height: 110px;
-      background: var(--card);
-      border: 1px solid var(--card-border);
-      border-radius: 6px;
-      position: absolute;
-      top: 0;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      color: #000;
+      overflow: hidden;
       user-select: none;
-      cursor: grab;
     }
-    .card.red { color: #b31212; }
-    .card.dragging {
-      opacity: 0.85;
-      cursor: grabbing;
-      z-index: 999;
-    }
-    .tableau .card {
-      left: 12px;
-      transform: none;
-    }
-    .highlight-drop {
-      outline: 2px solid #ffcc00;
-      outline-offset: 2px;
-    }
+    canvas { display: block; width: 100%; height: 100%; }
 
-    /* Devil's Six panel */
-    .devils-six {
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.05);
-      border-radius: 6px;
-      padding: 0.75rem;
-      position: sticky;
-      top: 3.6rem;
-    }
-    .devils-six h2 {
-      font-size: 0.85rem;
-      margin: 0 0 0.4rem 0;
-    }
-    .devil-slots {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 0.4rem;
-    }
-    .devil-slot {
-      height: 90px;
-      background: rgba(0,0,0,0.24);
-      border: 1px dashed rgba(255,255,255,0.18);
-      border-radius: 4px;
-      position: relative;
-    }
-    .footer {
-      padding: 1rem;
-      font-size: 0.7rem;
-      opacity: 0.5;
-    }
+    #ui { position:absolute; bottom:12px; left:12px; z-index:2; display:flex; gap:12px; align-items:center; }
+    .btn { background:rgba(0,0,0,.6); color:#fff; border:2px solid #e6c229; padding:10px 16px; border-radius:10px; font-weight:700; cursor:pointer; }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+
+    #status { position:absolute; top:12px; right:12px; text-align:right; font-weight:700; text-shadow:0 2px 6px rgba(0,0,0,.6); }
+    #message { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,.85); padding:28px 32px; border:3px solid #e6c229; border-radius:12px; display:none; z-index:3; }
+    #testout { position:absolute; bottom:8px; left:8px; background:rgba(0,0,0,.6); padding:8px 10px; border-radius:8px; font-size:12px; max-width:60ch; line-height:1.3; }
   </style>
 </head>
 <body>
-  <div class="top-bar">
-    <button id="newGameBtn">New Game</button>
-    <button id="dealBtn">Deal</button>
-    <span id="status"></span>
+  <div id="ui">
+    <button id="newGame" class="btn">New Game</button>
+    <button id="deal" class="btn">Deal</button>
+    <button id="hint" class="btn">Hint</button>
+    <button id="undo" class="btn">Undo</button>
   </div>
-
-  <div class="table">
-    <div class="left-col">
-      <!-- Top row: stock / waste / foundations -->
-      <div class="row" id="topRow">
-        <div>
-          <div class="pile-label">Stock</div>
-          <div class="pile" id="stockPile"></div>
-        </div>
-        <div>
-          <div class="pile-label">Waste</div>
-          <div class="pile" id="wastePile"></div>
-        </div>
-        <div style="display:flex; gap:0.5rem;">
-          <div>
-            <div class="pile-label">Foundation 1</div>
-            <div class="pile" data-foundation="0"></div>
-          </div>
-          <div>
-            <div class="pile-label">Foundation 2</div>
-            <div class="pile" data-foundation="1"></div>
-          </div>
-          <div>
-            <div class="pile-label">Foundation 3</div>
-            <div class="pile" data-foundation="2"></div>
-          </div>
-          <div>
-            <div class="pile-label">Foundation 4</div>
-            <div class="pile" data-foundation="3"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Tableau -->
-      <div class="row">
-        <div class="tableau-row" id="tableauRow">
-          <!-- 6 tableau piles for Devil's Six -->
-        </div>
-      </div>
-    </div>
-
-    <div class="right-col">
-      <div class="devils-six" id="devilsSixPanel">
-        <h2>Devil's Six</h2>
-        <p style="font-size:0.65rem; opacity:0.7;">These must stay visible. Don’t block this with buttons.</p>
-        <div class="devil-slots" id="devilSlots">
-          <!-- 6 special cards -->
-        </div>
-      </div>
-    </div>
+  <div id="status">
+    <div>Time: <span id="time">00:00</span></div>
+    <div>Deals: <span id="deals">0</span></div>
+    <div>Career: <span id="careerScore">0</span></div>
   </div>
-
-  <div class="footer">
-    Devil's Six / Churchill Solitaire — working draft. This version enforces: (1) no dealing into king-anchored tableau, (2) only legal runs can move, (3) buttons moved off the Devil’s Six panel.
+  <div id="message">
+    <div id="messageText" style="margin-bottom:14px;font-size:20px"></div>
+    <div style="text-align:center"><button id="playAgain" class="btn">Play Again</button></div>
   </div>
-
+  <div id="testout" aria-live="polite"></div>
+  <canvas id="game"></canvas>
   <script>
-    /****************************************************************
-     * Simple model
-     ****************************************************************/
-    const SUITS = ["♠","♥","♣","♦"];
-    const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+  // --- Canvas & DPR ---
+  const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  function resizeCanvas(){ const {width,height}=canvas.getBoundingClientRect(); canvas.width=Math.floor(width*DPR); canvas.height=Math.floor(height*DPR); ctx.setTransform(DPR,0,0,DPR,0,0); draw(); }
+  window.addEventListener('resize', resizeCanvas);
 
-    function createDeck() {
-      const deck = [];
-      for (let s = 0; s < SUITS.length; s++) {
-        for (let r = 0; r < RANKS.length; r++) {
-          deck.push({
-            id: SUITS[s] + RANKS[r],
-            suit: SUITS[s],
-            rank: RANKS[r],
-            value: r + 1,
-            color: (SUITS[s] === "♥" || SUITS[s] === "♦") ? "red" : "black"
-          });
-        }
+  // --- Card model ---
+  const SUITS = ['\u2660','\u2665','\u2666','\u2663']; // ♠ ♥ ♦ ♣
+  const COLORS = {'\u2660':'black','\u2663':'black','\u2665':'red','\u2666':'red'};
+  const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  const RVAL = {A:1,J:11,Q:12,K:13}; for(let i=2;i<=10;i++) RVAL[i]=i;
+  class Card { constructor(suit,rank){ this.suit=suit; this.rank=rank; this.faceUp=false; } get color(){return COLORS[this.suit]} get value(){return RVAL[this.rank]} get name(){return this.rank+this.suit} }
+
+  // --- State ---
+  let tableau = new Array(10).fill(0).map(()=>[]);
+  let devilsSix = [];
+  let foundations = new Array(8).fill(0).map(()=>[]); // two per suit
+  let stock = [];
+  let deck = [];
+  let deals = 0;
+  let timeStart = 0, ticker = null;
+  let undoStack = [];
+  let career = +localStorage.getItem('careerScore') || 0; document.getElementById('careerScore').textContent = career;
+
+  // --- Layout ---
+  let CARD_W=80, CARD_H=120, OVERLAP=24; const PADDING=16;
+  function layout(){ const w=canvas.getBoundingClientRect().width; CARD_W=Math.max(60, Math.min(90, Math.floor((w-PADDING*2)/14))); CARD_H=Math.floor(CARD_W*1.5); OVERLAP=Math.floor(CARD_H*0.30); }
+  function gutter(){ const w=canvas.getBoundingClientRect().width; const available=w-PADDING*2-CARD_W*10; return Math.max(6, Math.floor(available/9)); }
+  function colX(col){ return PADDING + col*(CARD_W + gutter()); }
+  function tableauTopY(){
+    // Push tableau below the 2x4 foundation block with a small margin
+    const top = TopGeom.fY + (CARD_H * TopGeom.fRows) + (TopGeom.fGapY * (TopGeom.fRows - 1)) + 24;
+    return Math.max(top, CARD_H + 56);
+  }
+
+  const TopGeom = { dsX:0, dsY:0, dsStep:0, stockX:0, stockY:0, fY:0, fCols:4, fRows:2, fGapX:12, fGapY:10, fSlots:[], fBlockW:0, fBlockH:0 };
+  function computeTopGeometry(){
+    const r = canvas.getBoundingClientRect();
+    // Devil's Six at top-left with slight horizontal overlap (stacked aesthetic)
+    TopGeom.dsX = PADDING; TopGeom.dsY = PADDING; TopGeom.dsStep = Math.max( Math.floor(CARD_W * 0.68), 36 );
+    const dsVisualWidth = CARD_W + (6-1) * TopGeom.dsStep;
+    TopGeom.stockX = TopGeom.dsX + dsVisualWidth + 16; TopGeom.stockY = TopGeom.dsY;
+
+    // Foundations as 2 rows x 4 cols, anchored to top-right
+    TopGeom.fCols = 4; TopGeom.fRows = 2; TopGeom.fGapX = 12; TopGeom.fGapY = 10; TopGeom.fY = PADDING;
+    TopGeom.fBlockW = TopGeom.fCols * CARD_W + (TopGeom.fCols - 1) * TopGeom.fGapX;
+    TopGeom.fBlockH = TopGeom.fRows * CARD_H + (TopGeom.fRows - 1) * TopGeom.fGapY;
+    const startX = Math.max(TopGeom.stockX + CARD_W + 20, r.width - PADDING - TopGeom.fBlockW);
+    TopGeom.fSlots = [];
+    for(let row=0; row<TopGeom.fRows; row++){
+      for(let col=0; col<TopGeom.fCols; col++){
+        const x = startX + col * (CARD_W + TopGeom.fGapX);
+        const y = TopGeom.fY + row * (CARD_H + TopGeom.fGapY);
+        TopGeom.fSlots.push({x,y});
       }
-      return deck;
     }
+  }
 
-    function shuffle(array) {
-      for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-      }
-      return array;
+  // --- Setup ---
+  function buildDeck(){ deck=[]; for(let d=0; d<2; d++) for(const s of SUITS) for(const r of RANKS) deck.push(new Card(s,r)); for(let i=deck.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [deck[i],deck[j]]=[deck[j],deck[i]]; } }
+  function newGame(){
+    buildDeck(); tableau=new Array(10).fill(0).map(()=>[]); devilsSix=[]; foundations=new Array(8).fill(0).map(()=>[]); stock=[]; undoStack=[];
+    for(let i=0;i<6;i++){ const c=deck.pop(); c.faceUp=true; devilsSix.push(c); }
+    const downs=[0,1,2,3,4,4,3,2,1,0];
+    for(let col=0; col<10; col++){
+      for(let d=0; d<downs[col]; d++){ const c=deck.pop(); c.faceUp=false; tableau[col].push(c);} const up=deck.pop(); up.faceUp=true; tableau[col].push(up);
     }
+    stock=deck; deals=0; document.getElementById('deals').textContent=deals; timeStart=Date.now(); if(ticker) clearInterval(ticker); ticker=setInterval(()=>{ const s=Math.floor((Date.now()-timeStart)/1000); const m=(s/60|0).toString().padStart(2,'0'); const ss=(s%60).toString().padStart(2,'0'); document.getElementById('time').textContent=`${m}:${ss}`; },1000);
+    updateUI(); draw();
+  }
 
-    // GAME STATE
-    const state = {
-      stock: [],
-      waste: [],
-      tableau: [], // array of arrays
-      foundations: [[],[],[],[]],
-      devilsSix: [],
-      dragging: null,
-      dragSource: null
-    };
+  // --- Drawing ---
+  function drawCard(card,x,y,opts={}){ const {ghost=false, highlight=false, emptyHint=false, foundationSuit=null}=opts; ctx.save(); ctx.translate(x,y); if(highlight){ ctx.shadowColor='rgba(230,194,41,.9)'; ctx.shadowBlur=16; } ctx.fillStyle='#fff'; ctx.strokeStyle='#111'; ctx.lineWidth=2; ctx.globalAlpha=ghost?0.85:1; if(card){ ctx.fillRect(0,0,CARD_W,CARD_H); ctx.strokeRect(0,0,CARD_W,CARD_H); if(card.faceUp){ ctx.fillStyle=(card.color==='red')?'#c72a2a':'#111'; ctx.font=`bold ${Math.floor(CARD_W/3)}px system-ui`; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText(card.rank,6,4); ctx.fillText(card.suit,6,Math.floor(CARD_H/2)); ctx.save(); ctx.translate(CARD_W-6,CARD_H-4); ctx.rotate(Math.PI); ctx.fillText(card.rank,0,0); ctx.fillText(card.suit,0,Math.floor(CARD_H/2)); ctx.restore(); } else { ctx.fillStyle='#1f4aa8'; ctx.fillRect(4,4,CARD_W-8,CARD_H-8); ctx.strokeStyle='#d9e2ff'; ctx.strokeRect(8,8,CARD_W-16,CARD_H-16); } } else { ctx.setLineDash([6,6]); ctx.strokeStyle='#e6c229'; ctx.strokeRect(0,0,CARD_W,CARD_H); ctx.setLineDash([]); if(emptyHint && foundationSuit){ ctx.fillStyle='#888'; ctx.font=`bold ${Math.floor(CARD_W/3)}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('A'+foundationSuit, CARD_W/2, CARD_H/2); } } ctx.restore(); }
 
-    const tableauRow = document.getElementById("tableauRow");
-    const stockPile = document.getElementById("stockPile");
-    const wastePile = document.getElementById("wastePile");
-    const statusEl = document.getElementById("status");
-    const dealBtn = document.getElementById("dealBtn");
-    const devilSlots = document.getElementById("devilSlots");
+  function draw(){ layout(); computeTopGeometry(); const r=canvas.getBoundingClientRect(); ctx.clearRect(0,0,r.width,r.height);
+    // DS and Stock
+    for(let i=0;i<devilsSix.length;i++) drawCard(devilsSix[i], TopGeom.dsX + i*TopGeom.dsStep, TopGeom.dsY);
+    drawCard(stock.length? {faceUp:false}: null, TopGeom.stockX, TopGeom.stockY); stockHitRect={x:TopGeom.stockX, y:TopGeom.stockY, w:CARD_W, h:CARD_H};
+    // Foundations
+    for(let i=0;i<8;i++){ const stack=foundations[i]; const top=stack[stack.length-1]||null; const slot=TopGeom.fSlots[i]; drawCard(top, slot.x, slot.y, {emptyHint:!top, foundationSuit:SUITS[i%4]}); }
+    // Tableau
+    const tY=tableauTopY(); for(let c=0;c<10;c++){ const x=colX(c); if(tableau[c].length===0) drawCard(null,x,tY); else for(let i=0;i<tableau[c].length;i++){ const card=tableau[c][i]; if(drag && drag.from.type==='tableau' && drag.from.col===c && i>=drag.from.idx) continue; drawCard(card, x, tY + i*OVERLAP); } }
+    // Drag visuals
+    if(drag){ const cards=drag.cards; for(let i=0;i<cards.length;i++){ drawCard(cards[i], mouseX - CARD_W/2, mouseY - CARD_H/2 + i*OVERLAP, {ghost:true, highlight:true}); } }
+  }
 
-    // init tableau HTML
-    for (let i = 0; i < 6; i++) {
-      const t = document.createElement("div");
-      t.className = "tableau";
-      t.dataset.index = i;
-      tableauRow.appendChild(t);
+  // --- Hit testing & interactions ---
+  let mouseX=0, mouseY=0; let stockHitRect={x:0,y:0,w:0,h:0};
+  canvas.addEventListener('mousemove', e=>{ const r=canvas.getBoundingClientRect(); mouseX=e.clientX-r.left; mouseY=e.clientY-r.top; if(drag) draw(); });
+  function cardAt(x,y){ computeTopGeometry(); // Foundations
+    for(let i=0;i<8;i++){ const slot=TopGeom.fSlots[i]; const fx=slot.x, fy=slot.y; if(x>fx && x<fx+CARD_W && y>fy && y<fy+CARD_H) return {type:'foundation', idx:i}; }
+    // DS
+    for(let i=0;i<devilsSix.length;i++){ const dx=TopGeom.dsX + i*TopGeom.dsStep, dy=TopGeom.dsY; if(x>dx&&x<dx+CARD_W&&y>dy&&y<dy+CARD_H) return {type:'devils', idx:i}; }
+    // Stock
+    if(stock.length && x>stockHitRect.x && x<stockHitRect.x+CARD_W && y>stockHitRect.y && y<stockHitRect.y+CARD_H) return {type:'stock'};
+    // Tableau
+    const tY=tableauTopY(); for(let c=0;c<10;c++){ const cx=colX(c); const col=tableau[c]; if(col.length===0){ if(x>cx&&x<cx+CARD_W&&y>tY&&y<tY+CARD_H) return {type:'tableau', col:c, row:-1}; continue; } for(let i=col.length-1;i>=0;i--){ const cy=tY+i*OVERLAP; if(x>cx&&x<cx+CARD_W&&y>cy&&y<cy+CARD_H) return {type:'tableau', col:c, row:i}; } } return null; }
+
+  function getRunLength(col,startIdx){
+    let len=1; const c=tableau[col];
+    for(let i=startIdx+1;i<c.length;i++){
+      const prev=c[i-1], cur=c[i];
+      if(!cur.faceUp) break;
+      if(prev.color===cur.color) break;
+      if(cur.value!==prev.value-1) break;
+      len++;
     }
-    // init devil slots HTML
-    for (let i = 0; i < 6; i++) {
-      const s = document.createElement("div");
-      s.className = "devil-slot";
-      s.dataset.index = i;
-      devilSlots.appendChild(s);
-    }
+    return len;
+  }
+  function canPlaceOnTableau(card,toCol){ const t=tableau[toCol]; const top=t[t.length-1]; if(!top) return card.value===13; return (card.color!==top.color)&&(card.value===top.value-1); }
+  function canPlaceOnFoundation(card,fIdx){ if(SUITS[fIdx%4]!==card.suit) return false; const stack=foundations[fIdx]; const top=stack[stack.length-1]; return top ? (card.value===top.value+1) : (card.value===1); }
 
-    function newGame() {
-      const deck = shuffle(createDeck());
-      // Devil's Six: first 6 cards (face-up)
-      state.devilsSix = deck.splice(0, 6);
-      // 6 tableau piles, start empty
-      state.tableau = [[],[],[],[],[],[]];
-      // stock is the rest
-      state.stock = deck;
-      state.waste = [];
-      state.foundations = [[],[],[],[]];
-      render();
-      setStatus("New game. Deal to start.");
-    }
+  let drag=null;
+  function canStartDragAt(col,row){
+    const colArr=tableau[col]; if(row<0||row>=colArr.length) return false; const card=colArr[row]; if(!card.faceUp) return false;
+    // If there is a face-up card directly above, it must be a proper chain link; otherwise selection is BLOCKED
+    if(row>0 && colArr[row-1].faceUp){ const above=colArr[row-1]; if(!(above.color!==card.color && above.value===card.value+1)) return false; }
+    return true;
+  }
 
-    function setStatus(msg) {
-      statusEl.textContent = msg;
-    }
-
-    /**
-     * DEAL LOGIC
-     * In your screenshot you said: "If a Tableau slot is anchored by a King then no new cards can be dealt into that slot!"
-     * Implementation: A tableau pile is considered *anchored by a king* if its BOTTOM card is a King.
-     * On deal we go left -> right through tableau piles and try to place 1 card from stock onto each NON-anchored pile.
-     */
-    function deal() {
-      if (state.stock.length === 0) {
-        setStatus("No more cards in stock.");
-        return;
-      }
-      // Deal up to 6 cards, skipping king-anchored piles
-      for (let i = 0; i < 6; i++) {
-        if (state.stock.length === 0) break;
-        const pile = state.tableau[i];
-        const anchoredByKing = pile.length > 0 && pile[0].rank === "K"; // bottom card
-        if (anchoredByKing) {
-          // skip
-          continue;
-        }
-        const card = state.stock.pop();
-        // push to TOP of tableau (i.e. end of array for render stacking)
-        pile.push(card);
-      }
-      render();
-      setStatus("Dealt.");
-    }
-
-    // check if a run starting at index k in pile is a legal moving run
-    // We will enforce: descending by 1 AND alternating colors
-    function isLegalRun(pile, startIndex) {
-      for (let i = startIndex; i < pile.length - 1; i++) {
-        const upper = pile[i];
-        const lower = pile[i + 1];
-        // must be value -1
-        if (upper.value !== lower.value + 1) return false;
-        // must alternate color
-        if (upper.color === lower.color) return false;
-      }
-      return true;
-    }
-
-    // check if run can be dropped on target tableau pile
-    function canDropRun(run, targetPile) {
-      if (targetPile.length === 0) {
-        // usually can drop anything on empty
-        return true;
-      }
-      const targetTop = targetPile[targetPile.length - 1];
-      const runFirst = run[0];
-      // to drop, targetTop must be exactly 1 higher and opposite color
-      if (targetTop.value === runFirst.value + 1 && targetTop.color !== runFirst.color) {
-        return true;
-      }
-      return false;
-    }
-
-    // drag handlers
-    function handleCardMouseDown(e, pileIndex, cardIndex, location) {
-      // location: "tableau", "waste", etc.
-      // Only allow tableau multi-card drags from a LEGAL run
-      let run = [];
-      if (location === "tableau") {
-        const pile = state.tableau[pileIndex];
-        if (!isLegalRun(pile, cardIndex)) {
-          // if not legal, only allow dragging the top card
-          if (cardIndex !== pile.length - 1) {
-            setStatus("Illegal run. You can't move blocked cards.");
-            return;
-          }
-        }
-        // grab run from cardIndex to end
-        run = pile.slice(cardIndex);
-        state.dragSource = { location, pileIndex, cardIndex };
-        state.dragging = run;
-      } else {
-        // for now only tableau drag
-        return;
-      }
-      document.addEventListener("mousemove", onDragMove);
-      document.addEventListener("mouseup", onDragEnd);
-      // mark DOM
-      e.currentTarget.classList.add("dragging");
-    }
-
-    function onDragMove(e) {
-      // we're not doing visual follow-the-mouse for each card here to keep it minimal
-      // but we CAN highlight tableau piles as potential drops
-      const elements = document.elementsFromPoint(e.clientX, e.clientY);
-      document.querySelectorAll(".tableau").forEach(t => t.classList.remove("highlight-drop"));
-      const target = elements.find(el => el.classList && el.classList.contains("tableau"));
-      if (target && state.dragging) {
-        const targetIndex = parseInt(target.dataset.index, 10);
-        const targetPile = state.tableau[targetIndex];
-        if (canDropRun(state.dragging, targetPile)) {
-          target.classList.add("highlight-drop");
+  canvas.addEventListener('mousedown', e=>{
+    const r=canvas.getBoundingClientRect(); mouseX=e.clientX-r.left; mouseY=e.clientY-r.top; const hit=cardAt(mouseX,mouseY); if(!hit) return; if(hit.type==='stock'){ doDeal(); return; }
+    // Click-to-foundation for ACES ONLY (top card or properly chained below a valid above card)
+    if(hit.type==='tableau' && hit.row>=0){
+      const card=tableau[hit.col][hit.row]; if(!card.faceUp) return;
+      if(card.value===1){
+        if(canStartDragAt(hit.col, hit.row)){
+          const suit=card.suit; const candidates=[0,1,2,3,4,5,6,7].filter(i=>SUITS[i%4]===suit); let placed=false;
+          for(const f of candidates){ if(foundations[f].length===0){ undoStack.push({kind:'toFound', from:{type:'tableau', col:hit.col, idx:hit.row}, fIdx:f, card}); tableau[hit.col].splice(hit.row,1); flipTop(hit.col); foundations[f].push(card); placed=true; break; } }
+          if(!placed){ for(const f of candidates){ if(canPlaceOnFoundation(card,f)){ undoStack.push({kind:'toFound', from:{type:'tableau', col:hit.col, idx:hit.row}, fIdx:f, card}); tableau[hit.col].splice(hit.row,1); flipTop(hit.col); foundations[f].push(card); placed=true; break; } } }
+          if(placed){ draw(); updateUI(); checkWinOrStuck(); return; }
         }
       }
     }
-
-    function onDragEnd(e) {
-      document.removeEventListener("mousemove", onDragMove);
-      document.removeEventListener("mouseup", onDragEnd);
-      document.querySelectorAll(".card.dragging").forEach(c => c.classList.remove("dragging"));
-      const elements = document.elementsFromPoint(e.clientX, e.clientY);
-      const target = elements.find(el => el.classList && el.classList.contains("tableau"));
-      if (!target || !state.dragging) {
-        // drop canceled
-        state.dragging = null;
-        state.dragSource = null;
-        document.querySelectorAll(".tableau").forEach(t => t.classList.remove("highlight-drop"));
-        return;
-      }
-      const targetIndex = parseInt(target.dataset.index, 10);
-      const targetPile = state.tableau[targetIndex];
-      if (!canDropRun(state.dragging, targetPile)) {
-        setStatus("Illegal move.");
-        state.dragging = null;
-        state.dragSource = null;
-        document.querySelectorAll(".tableau").forEach(t => t.classList.remove("highlight-drop"));
-        return;
-      }
-      // perform move
-      const { pileIndex, cardIndex } = state.dragSource;
-      const sourcePile = state.tableau[pileIndex];
-      const moved = sourcePile.splice(cardIndex);
-      targetPile.push(...moved);
-      state.dragging = null;
-      state.dragSource = null;
-      document.querySelectorAll(".tableau").forEach(t => t.classList.remove("highlight-drop"));
-      render();
-      setStatus("Moved.");
+    if(hit.type==='devils'){
+      const card=devilsSix[hit.idx]; if(card && card.value===1){ const suit=card.suit; const candidates=[0,1,2,3,4,5,6,7].filter(i=>SUITS[i%4]===suit); let placed=false; for(const f of candidates){ if(foundations[f].length===0){ undoStack.push({kind:'toFound', from:{type:'devils', idx:hit.idx}, fIdx:f, card}); devilsSix.splice(hit.idx,1); foundations[f].push(card); placed=true; break; } } if(!placed){ for(const f of candidates){ if(canPlaceOnFoundation(card,f)){ undoStack.push({kind:'toFound', from:{type:'devils', idx:hit.idx}, fIdx:f, card}); devilsSix.splice(hit.idx,1); foundations[f].push(card); placed=true; break; } } } if(placed){ draw(); updateUI(); checkWinOrStuck(); return; } }
     }
+    // Start a drag — only if selection point is valid per blocking rule
+    if(hit.type==='tableau'){
+      const col=hit.col, row=hit.row; if(row<0) return; const card=tableau[col][row]; if(!card||!card.faceUp) return; if(!canStartDragAt(col,row)) return; const len=getRunLength(col,row); drag={from:{type:'tableau', col, idx:row}, cards:tableau[col].slice(row,row+len)}; draw(); return; }
+    if(hit.type==='devils'){ const card=devilsSix[hit.idx]; if(!card) return; drag={from:{type:'devils', idx:hit.idx}, cards:[card]}; draw(); return; }
+  });
 
-    function render() {
-      // stock
-      stockPile.innerHTML = "";
-      if (state.stock.length > 0) {
-        const c = makeCardBack(state.stock.length);
-        stockPile.appendChild(c);
+  window.addEventListener('mouseup', e=>{
+    if(!drag) return; const r=canvas.getBoundingClientRect(); mouseX=e.clientX-r.left; mouseY=e.clientY-r.top; const drop=cardAt(mouseX,mouseY); const moving=drag.cards[0]; let moved=false;
+    if(drop){ if(drop.type==='foundation' && drag.cards.length===1 && canPlaceOnFoundation(moving,drop.idx)){ undoStack.push({kind:'toFound', from:JSON.parse(JSON.stringify(drag.from)), fIdx:drop.idx, card:moving}); if(drag.from.type==='tableau'){ tableau[drag.from.col].splice(drag.from.idx,1); flipTop(drag.from.col); } else { devilsSix.splice(drag.from.idx,1); } foundations[drop.idx].push(moving); moved=true; }
+      if(!moved && drop.type==='tableau' && drag.from.type==='tableau' && canPlaceOnTableau(moving, drop.col)){ const fromCol=drag.from.col, fromIdx=drag.from.idx, run=drag.cards.slice(); undoStack.push({kind:'tab2tab', from:{col:fromCol, idx:fromIdx}, toCol:drop.col, count:run.length}); tableau[drop.col].push(...run); tableau[fromCol].splice(fromIdx, run.length); flipTop(fromCol); moved=true; } }
+    drag=null; draw(); if(moved){ updateUI(); checkWinOrStuck(); }
+  });
+
+  function flipTop(col){ const t=tableau[col]; if(t.length && !t[t.length-1].faceUp) t[t.length-1].faceUp=true; }
+
+  // --- Deal: robust skip for King-anchored piles ---
+  function doDeal(){
+    if(!stock.length) return;
+    const dealt=[];
+    for(let c=0;c<10;c++){
+      const t=tableau[c];
+      const top=t[t.length-1];
+      const isKingTop = !!top && top.faceUp && top.value===13;
+      if(isKingTop) continue; // SKIP king-anchored piles
+      if(!stock.length) break;
+      const card=stock.pop(); card.faceUp=true; t.push(card); dealt.push({col:c, card});
+    }
+    if(dealt.length){ deals++; document.getElementById('deals').textContent=deals; undoStack.push({kind:'deal', dealt}); draw(); updateUI(); checkWinOrStuck(); }
+  }
+
+  function hasAnyMoves(){ if(devilsSix.some(c=>foundations.some((_,i)=>canPlaceOnFoundation(c,i)))) return true; for(let c=0;c<10;c++){ const t=tableau[c]; const top=t[t.length-1]; if(top && foundations.some((_,i)=>canPlaceOnFoundation(top,i))) return true; } for(let from=0; from<10; from++){ const t=tableau[from]; let start=t.findIndex(c=>c.faceUp); if(start<0) continue; for(let i=start;i<t.length;i++){ const base=t[i]; for(let to=0; to<10; to++){ if(to===from) continue; if(canPlaceOnTableau(base,to)) return true; } } } return false; }
+
+  function checkWinOrStuck(){ const totalFound=foundations.reduce((n,s)=>n+s.length,0); if(totalFound===104 && foundations.every(s=>s.length===13 && s[s.length-1].value===13)){ const secs=Math.floor((Date.now()-timeStart)/1000); career=career+Math.max(100, 1000 - deals*100 - Math.floor(secs/10)); localStorage.setItem('careerScore', career); document.getElementById('careerScore').textContent=career; showMessage('Victory! All eight foundations completed.'); return; } if(!stock.length && !hasAnyMoves()) showMessage('Stuck. No more moves and stock is empty.'); }
+
+  function showMessage(t){ document.getElementById('messageText').textContent=t; document.getElementById('message').style.display='block'; updateUI(true); if(ticker) clearInterval(ticker); }
+  function hideMessage(){ document.getElementById('message').style.display='none'; }
+  function updateUI(end=false){ document.getElementById('deal').disabled = stock.length===0; document.getElementById('undo').disabled = undoStack.length===0; if(end){ document.getElementById('deal').disabled=true; document.getElementById('hint').disabled=true; document.getElementById('undo').disabled=true; } }
+
+  function hint(){
+    // Foundation from tableau top
+    for(let c=0;c<10;c++){
+      const t=tableau[c]; const top=t[t.length-1];
+      if(top){ for(let f=0;f<8;f++){ if(canPlaceOnFoundation(top,f)){
+        flashCell(()=>{ const x=colX(c), y=tableauTopY()+ (t.length-1)*OVERLAP; drawCard(top,x,y,{highlight:true}); }); return; }
+      }}
+    }
+    // Foundation from Devil's Six
+    for(let i=0;i<devilsSix.length;i++){
+      const card=devilsSix[i]; for(let f=0;f<8;f++){ if(canPlaceOnFoundation(card,f)){
+        const x=TopGeom.dsX+i*(TopGeom.dsStep), y=TopGeom.dsY; flashCell(()=>drawCard(card,x,y,{highlight:true})); return; }
       }
-      // waste
-      wastePile.innerHTML = "";
-      if (state.waste.length > 0) {
-        const top = state.waste[state.waste.length - 1];
-        const el = makeCardEl(top);
-        wastePile.appendChild(el);
-      }
-      // foundations
-      document.querySelectorAll("[data-foundation]").forEach(el => {
-        const idx = parseInt(el.dataset.foundation, 10);
-        el.innerHTML = "";
-        const pile = state.foundations[idx];
-        if (pile.length > 0) {
-          const top = pile[pile.length - 1];
-          el.appendChild(makeCardEl(top));
+    }
+    // Tableau move
+    for(let from=0;from<10;from++){
+      const t=tableau[from]; for(let i=0;i<t.length;i++){
+        if(!t[i].faceUp) continue; const base=t[i];
+        for(let to=0;to<10;to++){ if(to===from) continue; if(canPlaceOnTableau(base,to)){
+          const x=colX(from), y=tableauTopY()+ i*OVERLAP; flashCell(()=>drawCard(base,x,y,{highlight:true})); return; }
         }
-      });
-      // tableau
-      for (let i = 0; i < 6; i++) {
-        const t = document.querySelector('.tableau[data-index="'+i+'"]');
-        t.innerHTML = "";
-        const pile = state.tableau[i];
-        pile.forEach((card, idx) => {
-          const el = makeCardEl(card);
-          el.style.top = (idx * 25) + "px";
-          el.addEventListener("mousedown", (e) => handleCardMouseDown(e, i, idx, "tableau"));
-          t.appendChild(el);
-        });
       }
-      // devils six
-      document.querySelectorAll(".devil-slot").forEach((slot, i) => {
-        slot.innerHTML = "";
-        const card = state.devilsSix[i];
-        if (card) {
-          const el = makeCardEl(card);
-          el.style.top = "4px";
-          el.style.left = "4px";
-          slot.appendChild(el);
-        }
-      });
-
-      // deal button enable/disable
-      dealBtn.disabled = state.stock.length === 0;
     }
+  }
+  function flashCell(paint){ let n=0; const id=setInterval(()=>{ draw(); if(n%2===0) paint(); if(++n>5) clearInterval(id); },120); }
 
-    function makeCardEl(card) {
-      const div = document.createElement("div");
-      div.className = "card " + (card.color === "red" ? "red" : "");
-      div.textContent = card.rank + card.suit;
-      return div;
-    }
-    function makeCardBack(count) {
-      const div = document.createElement("div");
-      div.className = "card";
-      div.style.background = "#123652";
-      div.style.color = "#fff";
-      div.textContent = count + "🂠";
-      return div;
-    }
+  // --- Undo ---
+  document.getElementById('undo').addEventListener('click', ()=>{ if(!undoStack.length) return; const step=undoStack.pop(); if(step.kind==='deal'){ for(let i=step.dealt.length-1;i>=0;i--){ const {col,card}=step.dealt[i]; tableau[col].pop(); card.faceUp=false; stock.push(card); } deals=Math.max(0,deals-1); document.getElementById('deals').textContent=deals; } if(step.kind==='tab2tab'){ const moved=tableau[step.toCol].splice(-step.count, step.count); tableau[step.from.col].splice(step.from.idx,0,...moved); flipTop(step.from.col); } if(step.kind==='toFound'){ const card=foundations[step.fIdx].pop(); if(step.from.type==='tableau'){ tableau[step.from.col].splice(step.from.idx,0,card); } else { devilsSix.splice(step.from.idx,0,card); } } draw(); updateUI(); });
 
-    document.getElementById("newGameBtn").addEventListener("click", newGame);
-    document.getElementById("dealBtn").addEventListener("click", deal);
+  document.getElementById('newGame').addEventListener('click', ()=>{ hideMessage(); newGame(); });
+  document.getElementById('deal').addEventListener('click', doDeal);
+  document.getElementById('hint').addEventListener('click', hint);
+  document.getElementById('playAgain').addEventListener('click', ()=>{ hideMessage(); newGame(); });
 
-    // start
+  // --- Tests (expanded) ---
+  function tAssert(cond, msg){ if(!tAssert.results) tAssert.results=[]; tAssert.results.push({ok:!!cond, msg}); if(!cond) console.error('TEST FAIL:', msg); }
+  function runTests(){
+    // basic setup
+    tAssert(Array.isArray(foundations) && foundations.length===8, '8 foundations exist');
+    tAssert(devilsSix.length===6, "Devil's Six has 6 cards");
+    const downs=[0,1,2,3,4,4,3,2,1,0]; for(let c=0;c<10;c++){ tAssert(tableau[c].length===downs[c]+1, `Tableau col ${c} initial length`); }
+    // tableau legality
+    const red7={suit:'\u2665', rank:'7', faceUp:true, color:'red', value:7}; const black8={suit:'\u2660', rank:'8', faceUp:true, color:'black', value:8}; tableau[0]=[black8]; tableau[1]=[red7]; tAssert(canPlaceOnTableau(red7,0),'7 red on 8 black legal'); const red8={suit:'\u2665', rank:'8', faceUp:true, color:'red', value:8}; tableau[0]=[red8]; tAssert(!canPlaceOnTableau(red7,0),'7 red on 8 red illegal');
+    // foundation build order
+    foundations=new Array(8).fill(0).map(()=>[]); const aS={suit:'\u2660', rank:'A', faceUp:true, color:'black', value:1}; const twoS={suit:'\u2660', rank:'2', faceUp:true, color:'black', value:2}; tAssert(canPlaceOnFoundation(aS,0),'Ace starts spade foundation'); foundations[0].push(aS); tAssert(canPlaceOnFoundation(twoS,0),'2 goes on A♠');
+    // geometry (right of stock and inside viewport)
+    computeTopGeometry(); const r=canvas.getBoundingClientRect();
+    const minFX = Math.min(...TopGeom.fSlots.map(s=>s.x));
+    const maxFX = Math.max(...TopGeom.fSlots.map(s=>s.x+CARD_W));
+    tAssert(minFX >= TopGeom.stockX + CARD_W + 20, 'Foundations to the right of stock');
+    tAssert(maxFX <= r.width - PADDING + 1, 'Foundations fit viewport');
+    // DEAL RULE: skip King-anchored piles
     newGame();
+    // make col0 King on top, faceUp
+    tableau[0].push(new Card('\u2660','K')); tableau[0][tableau[0].length-1].faceUp=true;
+    // ensure another column has non-king top
+    tableau[1].push(new Card('\u2665','Q')); tableau[1][tableau[1].length-1].faceUp=true;
+    const before0=tableau[0].length, before1=tableau[1].length; const stockBefore=stock.length; doDeal();
+    tAssert(tableau[0].length===before0, 'Deal skipped King-anchored column 0');
+    tAssert(tableau[1].length===before1+1 || stockBefore===0, 'Deal added to non-king column 1 (if stock remains)');
+    // BLOCKED sub-run cannot start drag
+    tableau[3] = [new Card('\u2660','Q'), new Card('\u2665','9')]; tableau[3][0].faceUp=true; tableau[3][1].faceUp=true;
+    tAssert(!canStartDragAt(3,1), 'Blocked interior card cannot start drag');
+    // reset for UI
+    newGame();
+    const fails=tAssert.results.filter(r=>!r.ok).length; document.getElementById('testout').textContent = fails?`Tests: ${tAssert.results.length-fails} passed, ${fails} failed`:`Tests: ${tAssert.results.length} passed`;
+  }
+
+  // boot
+  resizeCanvas(); layout(); newGame(); runTests();
   </script>
 </body>
 </html>
