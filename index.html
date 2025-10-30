@@ -15,7 +15,7 @@
     }
     canvas { display: block; width: 100%; height: 100%; }
 
-    #ui { position:absolute; top:12px; left:12px; z-index:2; display:flex; gap:12px; align-items:center; }
+    #ui { position:absolute; bottom:12px; left:12px; z-index:2; display:flex; gap:12px; align-items:center; }
     .btn { background:rgba(0,0,0,.6); color:#fff; border:2px solid #e6c229; padding:10px 16px; border-radius:10px; font-weight:700; cursor:pointer; }
     .btn:disabled { opacity:.5; cursor:not-allowed; }
 
@@ -146,12 +146,37 @@
   function canPlaceOnTableau(card,toCol){ const t=tableau[toCol]; const top=t[t.length-1]; if(!top) return card.value===13; return (card.color!==top.color)&&(card.value===top.value-1); }
   function canPlaceOnFoundation(card,fIdx){ if(SUITS[fIdx%4]!==card.suit) return false; const stack=foundations[fIdx]; const top=stack[stack.length-1]; return top ? (card.value===top.value+1) : (card.value===1); }
 
-  let drag=null; // {from:{type:'tableau'|'devils', col?, idx?}, cards:Card[]}
+  let drag=null;
+  function canStartDragAt(col,row){
+    const colArr=tableau[col]; if(row<0||row>=colArr.length) return false; const card=colArr[row]; if(!card.faceUp) return false;
+    // If there is a face-up card directly above, it must be a proper chain link; otherwise selection is BLOCKED
+    if(row>0 && colArr[row-1].faceUp){ const above=colArr[row-1]; if(!(above.color!==card.color && above.value===card.value+1)) return false; }
+    return true;
+  } // {from:{type:'tableau'|'devils', col?, idx?}, cards:Card[]}
 
   canvas.addEventListener('mousedown', e=>{
     const r=canvas.getBoundingClientRect(); mouseX=e.clientX-r.left; mouseY=e.clientY-r.top; const hit=cardAt(mouseX,mouseY); if(!hit) return; if(hit.type==='stock'){ doDeal(); return; }
-    // Click-to-foundation for ACES ONLY
-    if(hit.type==='tableau' && hit.row>=0){ const topIdx=tableau[hit.col].length-1; const isTop=(hit.row===topIdx); const card=tableau[hit.col][hit.row]; if(isTop && card.faceUp && card.value===1){ const suit=card.suit; const candidates=[0,1,2,3,4,5,6,7].filter(i=>SUITS[i%4]===suit); let placed=false; for(const f of candidates){ if(foundations[f].length===0){ undoStack.push({kind:'toFound', from:{type:'tableau', col:hit.col, idx:hit.row}, fIdx:f, card}); tableau[hit.col].splice(hit.row,1); flipTop(hit.col); foundations[f].push(card); placed=true; break; } } if(!placed){ for(const f of candidates){ if(canPlaceOnFoundation(card,f)){ undoStack.push({kind:'toFound', from:{type:'tableau', col:hit.col, idx:hit.row}, fIdx:f, card}); tableau[hit.col].splice(hit.row,1); flipTop(hit.col); foundations[f].push(card); placed=true; break; } } } if(placed){ draw(); updateUI(); checkWinOrStuck(); return; } } }
+    // Click-to-foundation for ACES ONLY (top card or properly chained below a valid above card)
+    if(hit.type==='tableau' && hit.row>=0){
+      const card=tableau[hit.col][hit.row]; if(!card.faceUp) return;
+      if(card.value===1){
+        // Only allow Ace click if it's the top card OR is correctly chained beneath its above card
+        if(canStartDragAt(hit.col, hit.row)){
+          const suit=card.suit; const candidates=[0,1,2,3,4,5,6,7].filter(i=>SUITS[i%4]===suit); let placed=false;
+          for(const f of candidates){ if(foundations[f].length===0){ undoStack.push({kind:'toFound', from:{type:'tableau', col:hit.col, idx:hit.row}, fIdx:f, card}); tableau[hit.col].splice(hit.row,1); flipTop(hit.col); foundations[f].push(card); placed=true; break; } }
+          if(!placed){ for(const f of candidates){ if(canPlaceOnFoundation(card,f)){ undoStack.push({kind:'toFound', from:{type:'tableau', col:hit.col, idx:hit.row}, fIdx:f, card}); tableau[hit.col].splice(hit.row,1); flipTop(hit.col); foundations[f].push(card); placed=true; break; } } }
+          if(placed){ draw(); updateUI(); checkWinOrStuck(); return; }
+        }
+      }
+    }
+    if(hit.type==='devils'){
+      const card=devilsSix[hit.idx]; if(card && card.value===1){ const suit=card.suit; const candidates=[0,1,2,3,4,5,6,7].filter(i=>SUITS[i%4]===suit); let placed=false; for(const f of candidates){ if(foundations[f].length===0){ undoStack.push({kind:'toFound', from:{type:'devils', idx:hit.idx}, fIdx:f, card}); devilsSix.splice(hit.idx,1); foundations[f].push(card); placed=true; break; } } if(!placed){ for(const f of candidates){ if(canPlaceOnFoundation(card,f)){ undoStack.push({kind:'toFound', from:{type:'devils', idx:hit.idx}, fIdx:f, card}); devilsSix.splice(hit.idx,1); foundations[f].push(card); placed=true; break; } } } if(placed){ draw(); updateUI(); checkWinOrStuck(); return; } }
+    }
+    // Start a drag — only if selection point is valid per blocking rule
+    if(hit.type==='tableau'){
+      const col=hit.col, row=hit.row; if(row<0) return; const card=tableau[col][row]; if(!card||!card.faceUp) return; if(!canStartDragAt(col,row)) return; const len=getRunLength(col,row); drag={from:{type:'tableau', col, idx:row}, cards:tableau[col].slice(row,row+len)}; draw(); return; }
+    if(hit.type==='devils'){ const card=devilsSix[hit.idx]; if(!card) return; drag={from:{type:'devils', idx:hit.idx}, cards:[card]}; draw(); return; }
+  }); tableau[hit.col].splice(hit.row,1); flipTop(hit.col); foundations[f].push(card); placed=true; break; } } if(!placed){ for(const f of candidates){ if(canPlaceOnFoundation(card,f)){ undoStack.push({kind:'toFound', from:{type:'tableau', col:hit.col, idx:hit.row}, fIdx:f, card}); tableau[hit.col].splice(hit.row,1); flipTop(hit.col); foundations[f].push(card); placed=true; break; } } } if(placed){ draw(); updateUI(); checkWinOrStuck(); return; } } }
     if(hit.type==='devils'){ const card=devilsSix[hit.idx]; if(card && card.value===1){ const suit=card.suit; const candidates=[0,1,2,3,4,5,6,7].filter(i=>SUITS[i%4]===suit); let placed=false; for(const f of candidates){ if(foundations[f].length===0){ undoStack.push({kind:'toFound', from:{type:'devils', idx:hit.idx}, fIdx:f, card}); devilsSix.splice(hit.idx,1); foundations[f].push(card); placed=true; break; } } if(!placed){ for(const f of candidates){ if(canPlaceOnFoundation(card,f)){ undoStack.push({kind:'toFound', from:{type:'devils', idx:hit.idx}, fIdx:f, card}); devilsSix.splice(hit.idx,1); foundations[f].push(card); placed=true; break; } } } if(placed){ draw(); updateUI(); checkWinOrStuck(); return; } } }
     // Start a drag
     if(hit.type==='tableau'){ const col=hit.col, row=hit.row; if(row<0) return; const card=tableau[col][row]; if(!card||!card.faceUp) return; const len=getRunLength(col,row); drag={from:{type:'tableau', col, idx:row}, cards:tableau[col].slice(row,row+len)}; draw(); return; }
@@ -170,16 +195,15 @@
   // --- Deal: robust skip for King-anchored piles ---
   function doDeal(){
     if(!stock.length) return;
-    // snapshot eligible columns: those whose top is NOT a King (value 13). Empty columns ARE eligible.
-    const eligCols = [];
-    for(let c=0;c<10;c++){
-      const t=tableau[c]; const top=t[t.length-1];
-      const isKingTop = !!top && top.faceUp && top.value===13; // anchored
-      if(!isKingTop) eligCols.push(c);
-    }
-    if(eligCols.length===0) { draw(); return; }
     const dealt=[];
-    for(const c of eligCols){ if(!stock.length) break; const card=stock.pop(); card.faceUp=true; tableau[c].push(card); dealt.push({col:c, card}); }
+    for(let c=0;c<10;c++){
+      const t=tableau[c];
+      const top=t[t.length-1];
+      const isKingTop = !!top && top.faceUp && top.value===13;
+      if(isKingTop) continue; // SKIP king-anchored piles
+      if(!stock.length) break;
+      const card=stock.pop(); card.faceUp=true; t.push(card); dealt.push({col:c, card});
+    }
     if(dealt.length){ deals++; document.getElementById('deals').textContent=deals; undoStack.push({kind:'deal', dealt}); draw(); updateUI(); checkWinOrStuck(); }
   }
 
