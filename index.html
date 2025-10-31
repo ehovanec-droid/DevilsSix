@@ -20,47 +20,57 @@
       user-select: none;
       display: flex;
       justify-content: center;
+      align-items: flex-start;
+      padding-top: 12px;
+      box-sizing: border-box;
     }
     #app {
       width: min(1220px, 100%);
-      padding: 4px 20px 28px;
+      padding: 0 20px 24px;
       box-sizing: border-box;
     }
     #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
       padding: 6px 14px;
       background: linear-gradient(180deg, rgba(35, 22, 13, 0.82) 0%, rgba(22, 12, 6, 0.88) 100%);
       border: 1px solid rgba(255, 222, 166, 0.28);
       border-radius: 14px;
-      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
-      margin: 8px auto 6px;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.38);
+      margin: 0;
       backdrop-filter: blur(2px);
       max-width: 320px;
+      pointer-events: none;
+      z-index: 2;
     }
     #identity {
       display: flex;
-      align-items: baseline;
-      gap: 8px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
       font-weight: 700;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
       color: #f7e7c4;
     }
     #identity .title {
-      font-size: 17px;
+      font-size: 16px;
+      letter-spacing: 0.18em;
     }
     #identity .subtitle {
-      font-size: 11px;
-      color: rgba(247, 231, 196, 0.7);
-      letter-spacing: 0.18em;
+      font-size: 10px;
+      color: rgba(247, 231, 196, 0.72);
+      letter-spacing: 0.26em;
     }
     #ui {
       position: absolute;
       top: 0;
-      left: 50%;
-      transform: translateX(-50%);
+      left: 0;
+      transform: none;
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
@@ -107,7 +117,7 @@
       position: relative;
       background: radial-gradient(circle at center, rgba(19, 10, 4, 0.86), rgba(13, 7, 3, 0.94));
       border-radius: 24px;
-      padding: 2px 22px 30px;
+      padding: 16px 22px 30px;
       box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.55), 0 24px 50px rgba(0, 0, 0, 0.55);
     }
     canvas {
@@ -143,12 +153,17 @@
     }
     @media (max-width: 780px) {
       #hud {
+        position: static;
+        margin: 6px auto 0;
         flex-direction: column;
-        gap: 12px;
+        gap: 6px;
+        align-items: center;
+      }
+      #identity {
         align-items: center;
       }
       #boardArea {
-        padding: 6px 16px 28px;
+        padding: 14px 16px 28px;
       }
       #ui {
         position: static;
@@ -161,13 +176,13 @@
 </head>
 <body>
   <div id="app">
-    <header id="hud">
-      <div id="identity">
-        <div class="title">Devil's Six</div>
-        <div class="subtitle" id="version"></div>
-      </div>
-    </header>
     <main id="boardArea">
+      <header id="hud">
+        <div id="identity">
+          <div class="title">Devil's Six</div>
+          <div class="subtitle" id="version"></div>
+        </div>
+      </header>
       <div id="ui">
         <button id="newGame" class="btn">New Deal</button>
         <button id="hint" class="btn">Hint</button>
@@ -185,12 +200,13 @@
 
   <script>
   const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  const VERSION = '2.6';
+  const VERSION = '2.7';
   document.getElementById('version').textContent = `Version ${VERSION}`;
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const controls = document.getElementById('ui');
+  const identityHud = document.getElementById('hud');
   const SUITS = ['\u2660','\u2665','\u2666','\u2663'];
   const COLORS = { '\u2660':'black', '\u2663':'black', '\u2665':'red', '\u2666':'red' };
   const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
@@ -322,8 +338,33 @@
     canvas.height = Math.floor(boardHeight * DPR);
     ctx.setTransform(DPR,0,0,DPR,0,0);
   }
+  function positionIdentity(){
+    if (!identityHud) return;
+    const computed = window.getComputedStyle(identityHud);
+    if (computed.position !== 'absolute') return;
+    const dsSlots = Math.max(devilsSix.length, 6);
+    const dsRight = TopGeom.dsX + CARD_W + TopGeom.dsStep * (dsSlots - 1);
+    const stockRight = TopGeom.stockX + CARD_W;
+    const horizontalPad = Math.max(12, Math.floor(CARD_W * 0.2));
+    const desiredLeft = Math.max(stockRight + horizontalPad, dsRight + horizontalPad);
+    const hudWidth = identityHud.offsetWidth || 0;
+    const safeRight = TopGeom.fSlots.length
+      ? TopGeom.fSlots[0].x - horizontalPad
+      : boardWidth - PADDING;
+    const rightLimit = Math.max(PADDING, safeRight - hudWidth);
+    const clampedLeft = Math.min(Math.max(desiredLeft, PADDING), rightLimit);
+    identityHud.style.left = `${clampedLeft}px`;
+    identityHud.style.top = `${TopGeom.dsY + Math.max(6, Math.floor(CARD_H * 0.09))}px`;
+    identityHud.style.transform = 'none';
+  }
   function positionControls(){
     if (!controls) return;
+    const layoutMode = window.getComputedStyle(controls).position;
+    if (layoutMode !== 'absolute'){
+      controls.style.transform = 'none';
+      positionIdentity();
+      return;
+    }
     const dsSlots = Math.max(devilsSix.length, 6);
     const dsRight = TopGeom.dsX + CARD_W + TopGeom.dsStep * (dsSlots - 1);
     let fLeft = boardWidth - PADDING - CARD_W;
@@ -342,6 +383,8 @@
     const controlsY = Math.max(afterDevils, verticalMid);
     controls.style.left = `${clampedX}px`;
     controls.style.top = `${controlsY}px`;
+    controls.style.transform = 'translateX(0)';
+    positionIdentity();
   }
   function render(){
     syncBoardMetrics();
@@ -682,7 +725,7 @@
     if (newDealBtn) newDealBtn.disabled = true;
     updateUI(true);
 
-    const stepDelay = Math.max(90, Math.min(240, Math.floor(2400 / dealt.length)));
+    const stepDelay = Math.max(45, Math.min(120, Math.floor(1200 / dealt.length)));
     try {
       for (let i=0;i<dealt.length;i++){
         const step = dealt[i];
@@ -776,11 +819,14 @@
     }
     for (const values of Object.values(suitRuns)){
       if (values.length < 3) continue;
-      values.sort((a,b)=>b-a);
+      const extended = values.slice();
+      let aceCopies = values.filter(v=>v===1).length;
+      while (aceCopies-- > 0) extended.push(14);
+      extended.sort((a,b)=>b-a);
       let run = 1;
-      let prev = values[0];
-      for (let i=1;i<values.length;i++){
-        const cur = values[i];
+      let prev = extended[0];
+      for (let i=1;i<extended.length;i++){
+        const cur = extended[i];
         if (cur === prev) continue;
         if (cur === prev - 1){
           run++;
