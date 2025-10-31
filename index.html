@@ -13,7 +13,12 @@
       overflow: hidden;
       user-select: none;
     }
-    canvas { display: block; width: 100%; height: 100%; }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
 
     #ui {
       position:absolute;
@@ -98,7 +103,6 @@
   <script>
   const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
   const canvas = document.getElementById('game');
-  canvas.style.touchAction = 'none';
   const ctx = canvas.getContext('2d');
   const SUITS = ['\u2660','\u2665','\u2666','\u2663'];
   const COLORS = { '\u2660':'black', '\u2663':'black', '\u2665':'red', '\u2666':'red' };
@@ -723,31 +727,47 @@
   const supportsPointer = 'PointerEvent' in window;
   if (supportsPointer){
     let activePointerId = null;
+    const isPrimaryPointer = e => {
+      if (e.pointerType === 'mouse') return e.button === 0;
+      return true;
+    };
     canvas.addEventListener('pointerdown', e=>{
       if (activePointerId !== null) return;
+      if (!isPrimaryPointer(e)) return;
       const pos = getCanvasPos(e.clientX, e.clientY);
       handlePrimaryDown(pos.x, pos.y);
       try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
       activePointerId = e.pointerId;
-      e.preventDefault();
-    });
+      if (e.pointerType !== 'mouse') e.preventDefault();
+    }, {passive:false});
     canvas.addEventListener('pointermove', e=>{
       if (activePointerId !== e.pointerId) return;
       const pos = getCanvasPos(e.clientX, e.clientY);
       handlePrimaryMove(pos.x, pos.y);
-    });
+      if (e.pointerType !== 'mouse') e.preventDefault();
+    }, {passive:false});
     const finishPointer = e=>{
       if (activePointerId !== e.pointerId) return;
       const pos = getCanvasPos(e.clientX, e.clientY);
       handlePrimaryUp(pos.x, pos.y);
       activePointerId = null;
       try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+      if (e.pointerType !== 'mouse') e.preventDefault();
     };
-    window.addEventListener('pointerup', finishPointer);
-    window.addEventListener('pointercancel', e=>{
+    canvas.addEventListener('pointerup', finishPointer, {passive:false});
+    window.addEventListener('pointerup', finishPointer, {passive:false});
+    const cancelPointer = e=>{
       if (activePointerId !== e.pointerId) return;
       activePointerId = null;
       try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+      cancelDrag();
+      if (e.pointerType !== 'mouse') e.preventDefault();
+    };
+    canvas.addEventListener('pointercancel', cancelPointer, {passive:false});
+    window.addEventListener('pointercancel', cancelPointer, {passive:false});
+    canvas.addEventListener('lostpointercapture', e=>{
+      if (activePointerId !== e.pointerId) return;
+      activePointerId = null;
       cancelDrag();
     });
   } else {
