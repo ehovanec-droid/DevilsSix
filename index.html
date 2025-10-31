@@ -5,100 +5,195 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Churchill Solitaire — Devil's Six</title>
   <style>
-    html, body { height: 100%; margin: 0; }
+    html,
     body {
-      background: radial-gradient(ellipse at center, #0e6a30 0%, #06421d 70%);
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-      color: #fff;
-      overflow: hidden;
+      height: 100%;
+      margin: 0;
+    }
+    body {
+      font-family: "Avenir Next", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #f4ede0;
+      background: radial-gradient(circle at top, rgba(97, 54, 23, 0.6) 0%, rgba(26, 14, 6, 0.9) 58%),
+        repeating-linear-gradient(135deg, #3d2210 0px, #3d2210 8px, #2a1709 8px, #2a1709 16px);
+      background-attachment: fixed;
+      overflow-y: auto;
       user-select: none;
+      display: flex;
+      justify-content: center;
+    }
+    #app {
+      width: min(1220px, 100%);
+      padding: 32px 32px 64px;
+      box-sizing: border-box;
+    }
+    #hud {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 24px;
+      background: linear-gradient(180deg, rgba(35, 22, 13, 0.82) 0%, rgba(22, 12, 6, 0.88) 100%);
+      border: 1px solid rgba(255, 222, 166, 0.28);
+      border-radius: 18px;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+      margin-bottom: 28px;
+      backdrop-filter: blur(2px);
+    }
+    #identity {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #f7e7c4;
+    }
+    #identity .subtitle {
+      font-size: 12px;
+      color: rgba(247, 231, 196, 0.75);
+      letter-spacing: 0.16em;
+    }
+    #ui {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn {
+      background: linear-gradient(180deg, rgba(71, 48, 24, 0.95) 0%, rgba(38, 23, 12, 0.95) 90%);
+      border: 1px solid rgba(249, 212, 102, 0.8);
+      border-radius: 999px;
+      color: #f9e1a7;
+      padding: 10px 18px;
+      font-weight: 700;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+      box-shadow: 0 10px 18px rgba(0, 0, 0, 0.35);
+    }
+    .btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 26px rgba(0, 0, 0, 0.45);
+      background: linear-gradient(180deg, rgba(92, 63, 30, 0.98) 0%, rgba(48, 29, 14, 0.98) 90%);
+    }
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    #status {
+      display: flex;
+      gap: 18px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 13px;
+      color: #f4e3bd;
+    }
+    #status span {
+      display: inline-block;
+      min-width: 48px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: #fff5d1;
+    }
+    #boardArea {
+      position: relative;
+      background: radial-gradient(circle at center, rgba(19, 10, 4, 0.86), rgba(13, 7, 3, 0.94));
+      border-radius: 26px;
+      padding: 28px 28px 60px;
+      box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.55), 0 24px 50px rgba(0, 0, 0, 0.55);
     }
     canvas {
       display: block;
       width: 100%;
-      height: 100%;
-      touch-action: none;
-    }
-
-    #ui {
-      position:absolute;
-      top:70px;
-      left:16px;
-      z-index:2;
-      display:flex;
-      gap:10px 12px;
-      align-items:center;
-      background:rgba(0,0,0,.30);
-      padding:6px 8px;
-      border-radius:8px;
-      backdrop-filter: blur(2px);
-    }
-    .btn {
-      background:rgba(0,0,0,.6);
-      color:#fff;
-      border:2px solid #e6c229;
-      padding:8px 14px;
-      border-radius:10px;
-      font-weight:700;
-      cursor:pointer;
-      font-size:14px;
-      transition:background .15s ease;
-    }
-    .btn:hover:not(:disabled) { background:rgba(230,194,41,.3); }
-    .btn:disabled { opacity:.55; cursor:not-allowed; }
-
-    #status {
-      position:absolute;
-      top:12px;
-      right:12px;
-      text-align:right;
-      font-weight:700;
-      text-shadow:0 2px 6px rgba(0,0,0,.6);
+      height: auto;
+      touch-action: pan-y;
     }
     #message {
-      position:absolute;
-      left:50%;
-      top:50%;
-      transform:translate(-50%,-50%);
-      background:rgba(0,0,0,.85);
-      padding:28px 32px;
-      border:3px solid #e6c229;
-      border-radius:12px;
-      display:none;
-      z-index:3;
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    #messageContent {
+      pointer-events: auto;
+      background: rgba(17, 10, 4, 0.94);
+      padding: 32px 40px;
+      border: 1px solid rgba(244, 215, 140, 0.8);
+      border-radius: 18px;
+      box-shadow: 0 22px 36px rgba(0, 0, 0, 0.6);
+      text-align: center;
+      min-width: 280px;
+    }
+    #messageText {
+      margin-bottom: 16px;
+      font-size: 20px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #ffecc4;
     }
     #testout {
-      position:absolute;
-      bottom:8px;
-      left:8px;
-      background:rgba(0,0,0,.6);
-      padding:6px 8px;
-      border-radius:6px;
-      font-size:11px;
-      max-width:60ch;
-      line-height:1.3;
-      pointer-events:none;
+      position: absolute;
+      bottom: 12px;
+      left: 18px;
+      background: rgba(0, 0, 0, 0.58);
+      padding: 6px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      max-width: 60ch;
+      line-height: 1.3;
+      pointer-events: none;
+      color: rgba(255, 255, 255, 0.72);
+    }
+    @media (max-width: 780px) {
+      #hud {
+        flex-direction: column;
+        gap: 18px;
+        align-items: stretch;
+      }
+      #status {
+        justify-content: center;
+      }
+      #boardArea {
+        padding: 22px 18px 48px;
+      }
     }
   </style>
 </head>
 <body>
-  <div id="ui">
-    <button id="newGame" class="btn">New Game</button>
-    <button id="deal" class="btn">Deal</button>
-    <button id="hint" class="btn">Hint</button>
-    <button id="undo" class="btn">Undo</button>
+  <div id="app">
+    <header id="hud">
+      <div id="identity">
+        <div>Devil's Six</div>
+        <div class="subtitle">Churchill Solitaire</div>
+      </div>
+      <div id="ui">
+        <button id="newGame" class="btn">New Deal</button>
+        <button id="deal" class="btn">Deal</button>
+        <button id="hint" class="btn">Hint</button>
+        <button id="undo" class="btn">Undo</button>
+      </div>
+      <div id="status">
+        <div>Time <span id="time">00:00</span></div>
+        <div>Deals <span id="deals">0</span></div>
+        <div>Career <span id="careerScore">0</span></div>
+      </div>
+    </header>
+    <main id="boardArea">
+      <canvas id="game"></canvas>
+      <div id="message">
+        <div id="messageContent">
+          <div id="messageText"></div>
+          <button id="playAgain" class="btn">Play Again</button>
+        </div>
+      </div>
+      <div id="testout"></div>
+    </main>
   </div>
-  <div id="status">
-    <div>Time: <span id="time">00:00</span></div>
-    <div>Deals: <span id="deals">0</span></div>
-    <div>Career: <span id="careerScore">0</span></div>
-  </div>
-  <div id="message">
-    <div id="messageText" style="margin-bottom:14px;font-size:20px"></div>
-    <div style="text-align:center"><button id="playAgain" class="btn">Play Again</button></div>
-  </div>
-  <div id="testout"></div>
-  <canvas id="game"></canvas>
 
   <script>
   const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
@@ -109,7 +204,7 @@
   const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
   const RVAL  = { A:1, J:11, Q:12, K:13 };
   for (let i=2;i<=10;i++) RVAL[i]=i;
-  const PADDING = 16;
+  const PADDING = 36;
 
   class Card {
     constructor(suit, rank){
@@ -137,11 +232,13 @@
   let anchoredCols = new Array(10).fill(false);
 
   let CARD_W = 80, CARD_H = 120, OVERLAP = 26;
+  let boardWidth = 0;
+  let boardHeight = 0;
 
   const TopGeom = {
     dsX: PADDING,
     dsY: PADDING,
-    dsStep: 50,
+    dsGap: 18,
     stockX: 0,
     stockY: 0,
     fSlots: [],
@@ -152,33 +249,37 @@
     fY: PADDING
   };
 
-  function layout(){
-    const w = canvas.getBoundingClientRect().width;
-    CARD_W = Math.max(58, Math.min(90, Math.floor((w - PADDING*2)/14)));
-    CARD_H = Math.floor(CARD_W * 1.5);
-    OVERLAP = Math.floor(CARD_H * 0.30);
+  function layout(w){
+    CARD_W = Math.max(56, Math.min(94, Math.floor((w - PADDING * 2) / 14)));
+    CARD_H = Math.floor(CARD_W * 1.52);
+    OVERLAP = Math.floor(CARD_H * 0.22);
   }
   function tableauGutter(){
-    const w = canvas.getBoundingClientRect().width;
-    const available = w - PADDING*2 - CARD_W*10;
-    return Math.max(4, Math.floor(available/9));
+    const available = boardWidth - PADDING * 2 - CARD_W * 10;
+    return Math.max(6, Math.floor(available / 9));
   }
   function colX(c){ return PADDING + c * (CARD_W + tableauGutter()); }
   function tableauTopY(){
-    const top = TopGeom.fY + (CARD_H * TopGeom.fRows) + (TopGeom.fGapY * (TopGeom.fRows - 1)) + 24;
-    return Math.max(top, CARD_H + 48);
+    const top = TopGeom.fY + (CARD_H * TopGeom.fRows) + (TopGeom.fGapY * (TopGeom.fRows - 1)) + 42;
+    return Math.max(top, CARD_H + 52);
   }
   function computeTopGeometry(){
-    const r = canvas.getBoundingClientRect();
-    TopGeom.dsX = PADDING;
     TopGeom.dsY = PADDING;
-    TopGeom.dsStep = Math.max(Math.floor(CARD_W * 0.62), 34);
-    const dsVisualWidth = CARD_W + (6-1)*TopGeom.dsStep;
-    TopGeom.stockX = TopGeom.dsX + dsVisualWidth + 14;
+    TopGeom.dsGap = Math.max(Math.floor(CARD_W * 0.16), 14);
+    TopGeom.fGapX = Math.max(Math.floor(CARD_W * 0.18), 14);
+    TopGeom.fGapY = Math.max(Math.floor(CARD_H * 0.1), 14);
+    TopGeom.stockX = PADDING;
     TopGeom.stockY = TopGeom.dsY;
+    const dsWidth = CARD_W * Math.max(devilsSix.length, 6) + TopGeom.dsGap * (Math.max(devilsSix.length, 6) - 1);
+    TopGeom.dsX = TopGeom.stockX + CARD_W + Math.max(28, Math.floor(CARD_W * 0.6));
 
-    const totalFW = TopGeom.fCols*CARD_W + (TopGeom.fCols-1)*TopGeom.fGapX;
-    const startX = Math.max(TopGeom.stockX + CARD_W + 18, r.width - PADDING - totalFW);
+    const totalFW = TopGeom.fCols * CARD_W + (TopGeom.fCols - 1) * TopGeom.fGapX;
+    const minStart = TopGeom.dsX + dsWidth + Math.max(30, Math.floor(CARD_W * 0.7));
+    let startX = boardWidth - PADDING - totalFW;
+    if (startX < minStart){
+      startX = Math.max(PADDING, Math.min(minStart, boardWidth - PADDING - totalFW));
+    }
+    startX = Math.max(PADDING, startX);
     TopGeom.fSlots = [];
     for (let row=0; row<TopGeom.fRows; row++){
       for (let col=0; col<TopGeom.fCols; col++){
@@ -188,28 +289,34 @@
       }
     }
   }
-  function placeButtons(){
-    const ui = document.getElementById('ui');
-    const r = canvas.getBoundingClientRect();
-    const dsRight = TopGeom.dsX + CARD_W + (6-1)*TopGeom.dsStep;
-    const uiWidth = ui.getBoundingClientRect().width;
-    if (dsRight + 14 + uiWidth < r.width - 260) {
-      ui.style.left = (dsRight + 14) + 'px';
-      ui.style.top = (TopGeom.dsY + 2) + 'px';
-    } else {
-      ui.style.left = TopGeom.dsX + 'px';
-      ui.style.top  = (TopGeom.dsY + CARD_H + 10) + 'px';
+  function computeBoardHeight(){
+    const tTop = tableauTopY();
+    let tallest = 1;
+    for (let i=0;i<tableau.length;i++){
+      tallest = Math.max(tallest, tableau[i].length);
     }
+    return Math.max(window.innerHeight * 0.82, tTop + (tallest - 1) * OVERLAP + CARD_H + PADDING);
+  }
+  function syncBoardMetrics(){
+    const width = canvas.clientWidth || canvas.parentElement.clientWidth || window.innerWidth;
+    boardWidth = width;
+    layout(width);
+    computeTopGeometry();
+    const desiredHeight = computeBoardHeight();
+    if (Math.abs(desiredHeight - boardHeight) > 1){
+      boardHeight = desiredHeight;
+      canvas.style.height = `${boardHeight}px`;
+    }
+    canvas.width = Math.floor(width * DPR);
+    canvas.height = Math.floor(boardHeight * DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  function render(){
+    syncBoardMetrics();
+    draw();
   }
   function resizeCanvas(){
-    const rect = canvas.getBoundingClientRect();
-    canvas.width  = Math.floor(rect.width * DPR);
-    canvas.height = Math.floor(rect.height * DPR);
-    ctx.setTransform(DPR,0,0,DPR,0,0);
-    layout();
-    computeTopGeometry();
-    placeButtons();
-    draw();
+    render();
   }
   window.addEventListener('resize', resizeCanvas);
 
@@ -217,42 +324,121 @@
   let drag = null;
   let mouseX = 0, mouseY = 0;
 
+  function drawRoundRect(x,y,w,h,r){
+    const rr = Math.min(r, Math.min(w,h)/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr,y);
+    ctx.arcTo(x+w,y,x+w,y+h,rr);
+    ctx.arcTo(x+w,y+h,x,y+h,rr);
+    ctx.arcTo(x,y+h,x,y,rr);
+    ctx.arcTo(x,y,x+w,y,rr);
+    ctx.closePath();
+  }
   function drawCard(card,x,y,opts={}){
     const {highlight=false,empty=false,suitHint=null,ghost=false} = opts;
     ctx.save();
     ctx.translate(x,y);
     ctx.globalAlpha = ghost ? 0.85 : 1;
+    const radius = Math.max(8, CARD_W * 0.16);
     if (card){
-      ctx.fillStyle = '#fff';
-      ctx.strokeStyle = '#111';
-      ctx.lineWidth = 2;
-      ctx.fillRect(0,0,CARD_W,CARD_H);
-      ctx.strokeRect(0,0,CARD_W,CARD_H);
+      ctx.shadowColor = 'rgba(0,0,0,0.42)';
+      ctx.shadowBlur = Math.max(12, CARD_W * 0.25);
+      ctx.shadowOffsetY = Math.max(4, CARD_H * 0.08);
+      const shellGradient = ctx.createLinearGradient(0,0,0,CARD_H);
       if (card.faceUp){
-        ctx.fillStyle = card.color === 'red' ? '#c52929' : '#111';
-        ctx.font = `bold ${Math.floor(CARD_W/3)}px system-ui`;
-        ctx.textAlign='left'; ctx.textBaseline='top';
-        ctx.fillText(card.rank,6,4);
-        ctx.fillText(card.suit,6,Math.floor(CARD_H/2));
+        shellGradient.addColorStop(0, '#faf8f4');
+        shellGradient.addColorStop(0.5, '#ffffff');
+        shellGradient.addColorStop(1, '#ece7dc');
       } else {
-        ctx.fillStyle = '#1947a5';
-        ctx.fillRect(4,4,CARD_W-8,CARD_H-8);
-        ctx.strokeStyle = '#cfd9ff';
-        ctx.strokeRect(8,8,CARD_W-16,CARD_H-16);
+        shellGradient.addColorStop(0, '#26418f');
+        shellGradient.addColorStop(1, '#152458');
       }
+      ctx.fillStyle = shellGradient;
+      drawRoundRect(0,0,CARD_W,CARD_H,radius);
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+
+      drawRoundRect(0,0,CARD_W,CARD_H,radius);
+      ctx.lineWidth = card.faceUp ? 1.6 : 1.8;
+      ctx.strokeStyle = card.faceUp ? '#151515' : '#0a163a';
+      ctx.stroke();
+
+      if (card.faceUp){
+        const insetRadius = Math.max(6, CARD_W * 0.12);
+        drawRoundRect(6,6,CARD_W-12,CARD_H-12,insetRadius);
+        const faceGradient = ctx.createLinearGradient(6,6,CARD_W-6,CARD_H-6);
+        faceGradient.addColorStop(0, 'rgba(255,255,255,0.9)');
+        faceGradient.addColorStop(1, 'rgba(236,233,220,0.85)');
+        ctx.fillStyle = faceGradient;
+        ctx.fill();
+
+        ctx.fillStyle = card.color === 'red' ? '#c93434' : '#111111';
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+        ctx.font = `700 ${Math.floor(CARD_W/4.1)}px "Avenir Next", "Segoe UI", sans-serif`;
+        ctx.fillText(card.rank, Math.floor(CARD_W*0.12), Math.floor(CARD_H*0.08));
+        ctx.font = `${Math.floor(CARD_W/4.8)}px "Avenir Next", "Segoe UI", sans-serif`;
+        ctx.fillText(card.suit, Math.floor(CARD_W*0.12), Math.floor(CARD_H*0.32));
+
+        ctx.save();
+        ctx.translate(CARD_W - Math.floor(CARD_W*0.12), CARD_H - Math.floor(CARD_H*0.08));
+        ctx.rotate(Math.PI);
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+        ctx.font = `700 ${Math.floor(CARD_W/4.1)}px "Avenir Next", "Segoe UI", sans-serif`;
+        ctx.fillText(card.rank, 0, 0);
+        ctx.font = `${Math.floor(CARD_W/4.8)}px "Avenir Next", "Segoe UI", sans-serif`;
+        ctx.fillText(card.suit, 0, Math.floor(CARD_H*0.24));
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(CARD_W/2, CARD_H/2);
+        ctx.font = `600 ${Math.floor(CARD_W/1.9)}px "Avenir Next", "Segoe UI", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.globalAlpha = 0.18;
+        ctx.fillStyle = card.color === 'red' ? '#d04747' : '#1f1f1f';
+        ctx.fillText(card.suit, 0, 0);
+        ctx.restore();
+      } else {
+        const insetRadius = Math.max(6, CARD_W * 0.12);
+        drawRoundRect(6,6,CARD_W-12,CARD_H-12,insetRadius);
+        ctx.save();
+        ctx.clip();
+        const patternSize = Math.max(14, Math.floor(CARD_W/5));
+        for (let yy=-patternSize; yy<CARD_H+patternSize; yy+=patternSize){
+          for (let xx=-patternSize; xx<CARD_W+patternSize; xx+=patternSize){
+            ctx.fillStyle = '#1e3080';
+            ctx.fillRect(xx,yy,patternSize,patternSize);
+            ctx.fillStyle = '#314ca8';
+            ctx.fillRect(xx,yy,patternSize/2,patternSize/2);
+            ctx.fillRect(xx+patternSize/2,yy+patternSize/2,patternSize/2,patternSize/2);
+          }
+        }
+        ctx.restore();
+        ctx.lineWidth = 1.4;
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.stroke();
+      }
+
       if (highlight){
-        ctx.strokeStyle = '#ffd54f';
         ctx.lineWidth = 3;
-        ctx.strokeRect(1,1,CARD_W-2,CARD_H-2);
+        ctx.strokeStyle = '#ffd86b';
+        drawRoundRect(1.5,1.5,CARD_W-3,CARD_H-3, Math.max(6, radius-2));
+        ctx.stroke();
       }
     } else {
-      ctx.setLineDash([6,6]);
-      ctx.strokeStyle = '#e6c229';
-      ctx.strokeRect(0,0,CARD_W,CARD_H);
+      ctx.setLineDash([7,7]);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(237, 202, 120, 0.8)';
+      drawRoundRect(0.5,0.5,CARD_W-1,CARD_H-1,radius);
+      ctx.stroke();
       ctx.setLineDash([]);
       if (suitHint){
-        ctx.fillStyle = '#888';
-        ctx.font = `bold ${Math.floor(CARD_W/3)}px system-ui`;
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        ctx.font = `700 ${Math.floor(CARD_W/3.2)}px "Avenir Next", "Segoe UI", sans-serif`;
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText('A'+suitHint, CARD_W/2, CARD_H/2);
       }
@@ -264,8 +450,11 @@
     const r = canvas.getBoundingClientRect();
     ctx.clearRect(0,0,r.width,r.height);
 
-    for (let i=0;i<devilsSix.length;i++){
-      drawCard(devilsSix[i], TopGeom.dsX + i*TopGeom.dsStep, TopGeom.dsY);
+    const dsSlots = Math.max(devilsSix.length, 6);
+    for (let i=0;i<dsSlots;i++){
+      const isDraggingDevil = drag && drag.from.type === 'devils' && drag.from.idx === i;
+      const card = (!isDraggingDevil && devilsSix[i]) ? devilsSix[i] : null;
+      drawCard(card, TopGeom.dsX + i*(CARD_W + TopGeom.dsGap), TopGeom.dsY, {empty:!card});
     }
     drawCard(stock.length ? {faceUp:false} : null, TopGeom.stockX, TopGeom.stockY);
     stockHit = {x:TopGeom.stockX, y:TopGeom.stockY, w:CARD_W, h:CARD_H};
@@ -306,7 +495,7 @@
         return {type:'foundation', idx:i};
     }
     for (let i=0;i<devilsSix.length;i++){
-      const dx = TopGeom.dsX + i*TopGeom.dsStep, dy=TopGeom.dsY;
+      const dx = TopGeom.dsX + i*(CARD_W + TopGeom.dsGap), dy=TopGeom.dsY;
       if (x>dx && x<dx+CARD_W && y>dy && y<dy+CARD_H)
         return {type:'devils', idx:i};
     }
@@ -370,7 +559,7 @@
   // ===== DEAL =====
   function doDeal(){
     if (!stock.length) {
-      draw();
+      render();
       updateUI();
       return;
     }
@@ -384,7 +573,7 @@
       }
     }
     if (allAnchored) {
-      draw();
+      render();
       updateUI();
       return;
     }
@@ -404,7 +593,7 @@
     }
 
     if (!dealt.length){
-      draw();
+      render();
       updateUI();
       return;
     }
@@ -412,7 +601,7 @@
     deals++;
     document.getElementById('deals').textContent = deals;
     undoStack.push({kind:'deal', payload:dealt});
-    draw();
+    render();
     updateUI();
     checkWinOrStuck();
   }
@@ -520,7 +709,7 @@
     },1000);
 
     updateUI();
-    draw();
+    render();
   }
 
   function updateUI(disable=false){
@@ -530,7 +719,7 @@
   }
   function showMessage(t){
     document.getElementById('messageText').textContent = t;
-    document.getElementById('message').style.display = 'block';
+    document.getElementById('message').style.display = 'flex';
     updateUI(true);
     if (timer) clearInterval(timer);
   }
@@ -551,11 +740,11 @@
     mouseX = x;
     mouseY = y;
     const hit = hitAt(x, y);
-    if (!hit) return;
+    if (!hit) return false;
 
     if (hit.type === 'stock'){
       doDeal();
-      return;
+      return true;
     }
 
     if (hit.type === 'tableau' && hit.row >= 0){
@@ -587,11 +776,11 @@
           }
         }
         if (placed){
-          draw();
+          render();
           updateUI();
           checkWinOrStuck();
+          return true;
         }
-        return;
       }
     }
 
@@ -622,32 +811,34 @@
           }
         }
         if (placed){
-          draw();
+          render();
           updateUI();
           checkWinOrStuck();
+          return true;
         }
-        return;
       }
     }
 
     if (hit.type === 'tableau'){
-      if (hit.row < 0) return;
-      if (!canStartDragAt(hit.col, hit.row)) return;
+      if (hit.row < 0) return false;
+      if (!canStartDragAt(hit.col, hit.row)) return false;
       const runLen = getRunLength(hit.col, hit.row);
       drag = {
         from: {type:'tableau', col:hit.col, idx:hit.row},
         cards: tableau[hit.col].slice(hit.row, hit.row + runLen)
       };
       draw();
-      return;
+      return true;
     }
 
     if (hit.type === 'devils'){
       const card = devilsSix[hit.idx];
       drag = {from:{type:'devils', idx:hit.idx}, cards:[card]};
       draw();
-      return;
+      return true;
     }
+
+    return false;
   }
 
   function handlePrimaryUp(x, y){
@@ -705,10 +896,26 @@
         });
         moved = true;
       }
+      else if (drop.type === 'tableau' && drag.from.type === 'devils' && canPlaceOnTableau(moving, drop.col)){
+        const toCol = drop.col;
+        const prevAnchored = anchoredCols[toCol];
+        tableau[toCol].push(moving);
+        devilsSix.splice(drag.from.idx,1);
+        if (prevAnchored === false && tableau[toCol].length === 1 && moving.faceUp && moving.value === 13){
+          anchoredCols[toCol] = true;
+        }
+        undoStack.push({
+          kind:'devils2tab',
+          toCol,
+          fromIdx: drag.from.idx,
+          prevAnchored
+        });
+        moved = true;
+      }
     }
 
     drag = null;
-    draw();
+    render();
     if (moved){
       updateUI();
       checkWinOrStuck();
@@ -718,7 +925,7 @@
   function cancelDrag(){
     if (drag){
       drag = null;
-      draw();
+      render();
     }
   }
 
@@ -735,16 +942,19 @@
       if (activePointerId !== null) return;
       if (!isPrimaryPointer(e)) return;
       const pos = getCanvasPos(e.clientX, e.clientY);
-      handlePrimaryDown(pos.x, pos.y);
-      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
-      activePointerId = e.pointerId;
-      if (e.pointerType !== 'mouse') e.preventDefault();
+      const handled = handlePrimaryDown(pos.x, pos.y);
+      const startedDrag = !!drag;
+      if (startedDrag){
+        try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+        activePointerId = e.pointerId;
+      }
+      if (handled && e.pointerType !== 'mouse') e.preventDefault();
     }, {passive:false});
     canvas.addEventListener('pointermove', e=>{
       if (activePointerId !== e.pointerId) return;
       const pos = getCanvasPos(e.clientX, e.clientY);
       handlePrimaryMove(pos.x, pos.y);
-      if (e.pointerType !== 'mouse') e.preventDefault();
+      if (drag && e.pointerType !== 'mouse') e.preventDefault();
     }, {passive:false});
     const finishPointer = e=>{
       if (activePointerId !== e.pointerId) return;
@@ -776,8 +986,10 @@
       handlePrimaryMove(pos.x, pos.y);
     });
     canvas.addEventListener('mousedown', e=>{
+      if (e.button !== 0) return;
       const pos = getCanvasPos(e.clientX, e.clientY);
-      handlePrimaryDown(pos.x, pos.y);
+      const handled = handlePrimaryDown(pos.x, pos.y);
+      if (handled) e.preventDefault();
     });
     window.addEventListener('mouseup', e=>{
       const pos = getCanvasPos(e.clientX, e.clientY);
@@ -790,8 +1002,12 @@
       const touch = e.changedTouches[0];
       if (!touch) return;
       const pos = getCanvasPos(touch.clientX, touch.clientY);
-      activeTouchId = touch.identifier;
-      handlePrimaryDown(pos.x, pos.y);
+      const handled = handlePrimaryDown(pos.x, pos.y);
+      const startedDrag = !!drag;
+      if (!handled) return;
+      if (startedDrag) {
+        activeTouchId = touch.identifier;
+      }
       e.preventDefault();
     }, {passive:false});
     window.addEventListener('touchmove', e=>{
@@ -801,7 +1017,7 @@
         if (touch.identifier === activeTouchId){
           const pos = getCanvasPos(touch.clientX, touch.clientY);
           handlePrimaryMove(pos.x, pos.y);
-          e.preventDefault();
+          if (drag) e.preventDefault();
           break;
         }
       }
@@ -853,6 +1069,14 @@
       if (typeof step.prevAnchored === 'boolean') {
         anchoredCols[step.toCol] = step.prevAnchored;
       }
+    } else if (step.kind === 'devils2tab'){
+      const card = tableau[step.toCol].pop();
+      if (card){
+        devilsSix.splice(step.fromIdx,0,card);
+      }
+      if (typeof step.prevAnchored === 'boolean') {
+        anchoredCols[step.toCol] = step.prevAnchored;
+      }
     } else if (step.kind === 'toFound'){
       const card = foundations[step.fIdx].pop();
       if (step.from.type === 'tableau'){
@@ -861,7 +1085,7 @@
         devilsSix.splice(step.from.idx,0,card);
       }
     }
-    draw();
+    render();
     updateUI();
   });
 
@@ -882,7 +1106,7 @@
       const card = devilsSix[i];
       for (let f=0;f<8;f++){
         if (canPlaceOnFoundation(card,f)){
-          flash(()=>{ drawCard(card, TopGeom.dsX + i*TopGeom.dsStep, TopGeom.dsY, {highlight:true}); });
+          flash(()=>{ drawCard(card, TopGeom.dsX + i*(CARD_W + TopGeom.dsGap), TopGeom.dsY, {highlight:true}); });
           return;
         }
       }
@@ -905,7 +1129,7 @@
   function flash(paint){
     let n=0;
     const id=setInterval(()=>{
-      draw();
+      render();
       if (n%2===0) paint();
       if (++n>5) clearInterval(id);
     },120);
