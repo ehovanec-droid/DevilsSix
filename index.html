@@ -136,19 +136,6 @@
       text-transform: uppercase;
       color: #ffecc4;
     }
-    #testout {
-      position: absolute;
-      bottom: 12px;
-      left: 18px;
-      background: rgba(0, 0, 0, 0.58);
-      padding: 6px 10px;
-      border-radius: 12px;
-      font-size: 11px;
-      max-width: 60ch;
-      line-height: 1.3;
-      pointer-events: none;
-      color: rgba(255, 255, 255, 0.72);
-    }
     @media (max-width: 780px) {
       #hud {
         flex-direction: column;
@@ -191,7 +178,6 @@
           <button id="playAgain" class="btn">Play Again</button>
         </div>
       </div>
-      <div id="testout"></div>
     </main>
   </div>
 
@@ -499,7 +485,12 @@
   }
 
   let drawPending = false;
-  function queueDraw(){
+  function queueDraw(immediate=false){
+    if (immediate){
+      drawPending = false;
+      draw();
+      return;
+    }
     if (drawPending) return;
     drawPending = true;
     requestAnimationFrame(()=>{
@@ -508,10 +499,15 @@
     });
   }
 
-  function hitAt(x,y){
+  function hitAt(x,y,loose=false){
+    const fMarginX = loose ? Math.max(12, Math.floor(CARD_W * 0.35)) : 0;
+    const fMarginY = loose ? Math.max(12, Math.floor(CARD_H * 0.35)) : 0;
+    const tMarginX = loose ? Math.max(14, Math.floor(CARD_W * 0.45)) : 0;
+    const tMarginY = loose ? Math.max(16, Math.floor(CARD_H * 0.45)) : 0;
+
     for (let i=0;i<8;i++){
       const s = TopGeom.fSlots[i];
-      if (x>s.x && x<s.x+CARD_W && y>s.y && y<s.y+CARD_H)
+      if (x>s.x - fMarginX && x<s.x+CARD_W + fMarginX && y>s.y - fMarginY && y<s.y+CARD_H + fMarginY)
         return {type:'foundation', idx:i};
     }
     for (let i=0;i<devilsSix.length;i++){
@@ -527,12 +523,12 @@
       const cx = colX(c);
       const col = tableau[c];
       if (!col.length){
-        if (x>cx && x<cx+CARD_W && y>tY && y<tY+CARD_H) return {type:'tableau', col:c, row:-1};
+        if (x>cx - tMarginX && x<cx+CARD_W + tMarginX && y>tY - tMarginY && y<tY+CARD_H + tMarginY) return {type:'tableau', col:c, row:-1};
         continue;
       }
       for (let i=col.length-1;i>=0;i--){
         const cy = tY + i*OVERLAP;
-        if (x>cx && x<cx+CARD_W && y>cy && y<cy+CARD_H)
+        if (x>cx - tMarginX && x<cx+CARD_W + tMarginX && y>cy - tMarginY && y<cy+CARD_H + tMarginY)
           return {type:'tableau', col:c, row:i};
       }
     }
@@ -687,21 +683,63 @@
     }
     deck = temp;
   }
-  function newGame(){
-    buildDeck();
-    tableau = new Array(10).fill(0).map(()=>[]);
-    devilsSix = [];
-    foundations = new Array(8).fill(0).map(()=>[]);
-    stock = [];
-    undoStack = [];
-    // ★ reset anchored columns
-    anchoredCols = new Array(10).fill(false);
-
+  function drawDevilsSixFromDeck(){
+    const cards = [];
     for (let i=0;i<6;i++){
       const c = deck.pop();
       c.faceUp = true;
-      devilsSix.push(c);
+      cards.push(c);
     }
+    return cards;
+  }
+
+  function isDevilsSixUnwinnable(cards){
+    const suitRuns = {};
+    for (let i=cards.length-1;i>=0;i--){
+      const card = cards[i];
+      if (!suitRuns[card.suit]) suitRuns[card.suit] = [];
+      suitRuns[card.suit].push(card.value);
+    }
+    for (const values of Object.values(suitRuns)){
+      if (values.length < 3) continue;
+      let run = 1;
+      for (let i=1;i<values.length;i++){
+        if (values[i] < values[i-1]){
+          run++;
+          if (run >= 3) return true;
+        } else {
+          run = 1;
+        }
+      }
+    }
+    return false;
+  }
+
+  function preparePlayableDevilsSix(){
+    const MAX_ATTEMPTS = 5000;
+    let attempt = 0;
+    let candidate = [];
+    while (attempt < MAX_ATTEMPTS){
+      buildDeck();
+      candidate = drawDevilsSixFromDeck();
+      if (!isDevilsSixUnwinnable(candidate)){
+        return candidate;
+      }
+      attempt++;
+    }
+    console.warn('Unable to find a guaranteed winnable Devil\'s Six after many attempts; proceeding with current deal.');
+    return candidate;
+  }
+
+  function newGame(){
+    undoStack = [];
+    anchoredCols = new Array(10).fill(false);
+    foundations = new Array(8).fill(0).map(()=>[]);
+    tableau = new Array(10).fill(0).map(()=>[]);
+    stock = [];
+
+    const freshDevilsSix = preparePlayableDevilsSix();
+    devilsSix = freshDevilsSix;
 
     const downs = [0,1,2,3,4,4,3,2,1,0];
     for (let col=0; col<10; col++){
@@ -753,7 +791,7 @@
   function handlePrimaryMove(x, y){
     mouseX = x;
     mouseY = y;
-    if (drag) queueDraw();
+    if (drag) queueDraw(true);
   }
 
   function handlePrimaryDown(x, y){
@@ -869,7 +907,7 @@
     }
     mouseX = x;
     mouseY = y;
-    const drop = hitAt(mouseX, mouseY);
+    const drop = hitAt(mouseX, mouseY, true);
     const moving = drag.cards[0];
     let moved = false;
 
