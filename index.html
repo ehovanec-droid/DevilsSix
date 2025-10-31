@@ -13,10 +13,8 @@
     body {
       font-family: "Avenir Next", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       color: #f4ede0;
-      background: radial-gradient(circle at top, rgba(92, 52, 26, 0.82) 0%, rgba(21, 11, 5, 0.95) 58%),
-        radial-gradient(circle at 68% 110%, rgba(57, 32, 16, 0.65) 0%, rgba(13, 7, 3, 0.95) 45%);
-      background-color: #1a0d06;
-      background-blend-mode: multiply;
+      background: radial-gradient(circle at top, rgba(97, 54, 23, 0.6) 0%, rgba(26, 14, 6, 0.9) 58%),
+        repeating-linear-gradient(135deg, #3d2210 0px, #3d2210 8px, #2a1709 8px, #2a1709 16px);
       background-attachment: fixed;
       overflow-y: auto;
       user-select: none;
@@ -78,7 +76,7 @@
     }
     .btn {
       background: linear-gradient(180deg, rgba(71, 48, 24, 0.95) 0%, rgba(38, 23, 12, 0.95) 90%);
-      border: none;
+      border: 1px solid rgba(249, 212, 102, 0.8);
       border-radius: 999px;
       color: #f9e1a7;
       padding: 10px 18px;
@@ -103,7 +101,7 @@
     }
     #boardArea {
       position: relative;
-      background: radial-gradient(circle at center, #2a1408 0%, #100703 65%, #070402 100%);
+      background: radial-gradient(circle at center, rgba(19, 10, 4, 0.86), rgba(13, 7, 3, 0.94));
       border-radius: 24px;
       padding: 2px 22px 30px;
       box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.55), 0 24px 50px rgba(0, 0, 0, 0.55);
@@ -183,7 +181,7 @@
 
   <script>
   const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  const VERSION = '2.5';
+  const VERSION = '2.4';
   document.getElementById('version').textContent = `Version ${VERSION}`;
 
   const canvas = document.getElementById('game');
@@ -236,9 +234,9 @@
   };
 
   function layout(w){
-    CARD_W = Math.max(60, Math.min(108, Math.floor((w - PADDING * 2) / 13.15)));
+    CARD_W = Math.max(60, Math.min(102, Math.floor((w - PADDING * 2) / 13.6)));
     CARD_H = Math.floor(CARD_W * 1.46);
-    OVERLAP = Math.floor(CARD_H * 0.235);
+    OVERLAP = Math.floor(CARD_H * 0.2);
   }
   function tableauGutter(){
     const available = boardWidth - PADDING * 2 - CARD_W * 10;
@@ -328,10 +326,9 @@
     }
     const gap = Math.max(0, fLeft - dsRight);
     const centerX = dsRight + gap / 2;
-    const desiredCenter = centerX + Math.min(14, gap * 0.18);
     const minX = TopGeom.dsX + CARD_W + 24;
     const maxX = Math.max(minX, boardWidth - PADDING - 24);
-    const clampedX = Math.max(minX, Math.min(desiredCenter, maxX));
+    const clampedX = Math.max(minX, Math.min(centerX, maxX));
     const verticalMid = TopGeom.fY + CARD_H * 0.48;
     controls.style.left = `${clampedX}px`;
     controls.style.top = `${verticalMid}px`;
@@ -399,29 +396,29 @@
         ctx.fillStyle = faceGradient;
         ctx.fill();
 
-        const cornerInsetX = Math.floor(CARD_W * 0.082);
-        const cornerInsetY = Math.floor(CARD_H * 0.038);
+        const cornerInsetX = Math.floor(CARD_W * 0.085);
+        const cornerInsetY = Math.floor(CARD_H * 0.05);
         const rightInsetX = CARD_W - cornerInsetX;
         ctx.fillStyle = card.color === 'red' ? '#be1e2d' : '#141414';
         ctx.textBaseline = 'top';
         ctx.textAlign = 'left';
-        ctx.font = `700 ${Math.floor(CARD_W/3.45)}px "Avenir Next", "Segoe UI", sans-serif`;
+        ctx.font = `700 ${Math.floor(CARD_W/3.9)}px "Avenir Next", "Segoe UI", sans-serif`;
         ctx.fillText(card.rank, cornerInsetX, cornerInsetY);
 
         ctx.textAlign = 'right';
-        ctx.font = `${Math.floor(CARD_W/4.1)}px "Avenir Next", "Segoe UI", sans-serif`;
-        ctx.fillText(card.suit, rightInsetX, cornerInsetY + Math.floor(CARD_H * 0.008));
+        ctx.font = `${Math.floor(CARD_W/4.5)}px "Avenir Next", "Segoe UI", sans-serif`;
+        ctx.fillText(card.suit, rightInsetX, cornerInsetY + Math.floor(CARD_H * 0.01));
 
         ctx.save();
         ctx.translate(CARD_W, CARD_H);
         ctx.rotate(Math.PI);
         ctx.textBaseline = 'top';
         ctx.textAlign = 'left';
-        ctx.font = `700 ${Math.floor(CARD_W/3.45)}px "Avenir Next", "Segoe UI", sans-serif`;
+        ctx.font = `700 ${Math.floor(CARD_W/3.9)}px "Avenir Next", "Segoe UI", sans-serif`;
         ctx.fillText(card.rank, cornerInsetX, cornerInsetY);
         ctx.textAlign = 'right';
-        ctx.font = `${Math.floor(CARD_W/4.1)}px "Avenir Next", "Segoe UI", sans-serif`;
-        ctx.fillText(card.suit, CARD_W - cornerInsetX, cornerInsetY + Math.floor(CARD_H * 0.008));
+        ctx.font = `${Math.floor(CARD_W/4.5)}px "Avenir Next", "Segoe UI", sans-serif`;
+        ctx.fillText(card.suit, CARD_W - cornerInsetX, cornerInsetY + Math.floor(CARD_H * 0.01));
         ctx.restore();
 
         ctx.save();
