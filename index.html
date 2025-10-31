@@ -23,7 +23,7 @@
     }
     #app {
       width: min(1220px, 100%);
-      padding: 12px 20px 32px;
+      padding: 4px 20px 28px;
       box-sizing: border-box;
     }
     #hud {
@@ -35,11 +35,9 @@
       border: 1px solid rgba(255, 222, 166, 0.28);
       border-radius: 14px;
       box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
-      margin-bottom: 4px;
+      margin: 8px auto 6px;
       backdrop-filter: blur(2px);
       max-width: 320px;
-      margin-left: auto;
-      margin-right: auto;
     }
     #identity {
       display: flex;
@@ -62,7 +60,7 @@
       position: absolute;
       top: 0;
       left: 50%;
-      transform: translate(-50%, -50%);
+      transform: translateX(-50%);
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
@@ -217,6 +215,7 @@
   let deck = [];
   let deals = 0;
   let undoStack = [];
+  let isAnimatingDeal = false;
 
   // ★ NEW: track which tableau columns have had a king planted
   let anchoredCols = new Array(10).fill(false);
@@ -240,9 +239,10 @@
   };
 
   function layout(w){
-    CARD_W = Math.max(70, Math.min(112, Math.floor((w - PADDING * 2) / 12.8) + 2));
-    CARD_H = Math.floor(CARD_W * 1.45);
-    OVERLAP = Math.max(24, Math.floor(CARD_H * 0.24));
+    const proposed = Math.floor((w - PADDING * 2) / 12.6) + 4;
+    CARD_W = Math.max(72, Math.min(116, proposed));
+    CARD_H = Math.max(94, Math.floor(CARD_W * 1.45) - 2);
+    OVERLAP = Math.max(22, Math.floor(CARD_H * 0.23));
   }
   function tableauGutter(){
     const available = boardWidth - PADDING * 2 - CARD_W * 10;
@@ -268,18 +268,18 @@
     for (let i=0;i<tableau.length;i++) refreshAnchorForColumn(i);
   }
   function tableauTopY(){
-    const top = TopGeom.fY + (CARD_H * TopGeom.fRows) + (TopGeom.fGapY * (TopGeom.fRows - 1)) + Math.max(6, Math.floor(CARD_H * 0.06));
-    return Math.max(top, CARD_H + Math.max(20, Math.floor(CARD_H * 0.16)));
+    const top = TopGeom.fY + (CARD_H * TopGeom.fRows) + (TopGeom.fGapY * (TopGeom.fRows - 1)) + Math.max(4, Math.floor(CARD_H * 0.05));
+    return Math.max(top, CARD_H + Math.max(16, Math.floor(CARD_H * 0.14)));
   }
   function computeTopGeometry(){
-    const topBand = Math.max(6, Math.floor(CARD_H * 0.045));
+    const topBand = Math.max(3, Math.floor(CARD_H * 0.032));
     TopGeom.dsY = topBand;
     TopGeom.dsStep = Math.max(Math.floor(CARD_W * 0.32), 22);
     TopGeom.fGapX = Math.max(Math.floor(CARD_W * 0.18), 12);
-    TopGeom.fGapY = Math.max(Math.floor(CARD_H * 0.06), 6);
+    TopGeom.fGapY = Math.max(Math.floor(CARD_H * 0.055), 6);
     TopGeom.stockX = PADDING;
     TopGeom.stockY = TopGeom.dsY;
-    TopGeom.fY = Math.max(4, topBand + Math.max(Math.floor(CARD_H * 0.02), 2));
+    TopGeom.fY = Math.max(4, topBand + Math.max(Math.floor(CARD_H * 0.015), 2));
     const dsSlots = Math.max(devilsSix.length, 6);
     const dsWidth = CARD_W + TopGeom.dsStep * (dsSlots - 1);
     TopGeom.dsX = TopGeom.stockX + CARD_W + Math.max(28, Math.floor(CARD_W * 0.6));
@@ -338,8 +338,10 @@
     const targetX = centerX + shift;
     const clampedX = Math.max(minX, Math.min(targetX, maxX));
     const verticalMid = TopGeom.fY + CARD_H * 0.48;
+    const afterDevils = TopGeom.dsY + CARD_H + Math.max(6, Math.floor(CARD_H * 0.08));
+    const controlsY = Math.max(afterDevils, verticalMid);
     controls.style.left = `${clampedX}px`;
-    controls.style.top = `${verticalMid}px`;
+    controls.style.top = `${controlsY}px`;
   }
   function render(){
     syncBoardMetrics();
@@ -555,11 +557,13 @@
     });
   }
 
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
   function hitAt(x,y,loose=false){
-    const fMarginX = loose ? Math.max(12, Math.floor(CARD_W * 0.35)) : 0;
-    const fMarginY = loose ? Math.max(12, Math.floor(CARD_H * 0.35)) : 0;
-    const tMarginX = loose ? Math.max(14, Math.floor(CARD_W * 0.45)) : 0;
-    const tMarginY = loose ? Math.max(16, Math.floor(CARD_H * 0.45)) : 0;
+    const fMarginX = loose ? Math.max(14, Math.floor(CARD_W * 0.5)) : 0;
+    const fMarginY = loose ? Math.max(14, Math.floor(CARD_H * 0.5)) : 0;
+    const tMarginX = loose ? Math.max(18, Math.floor(CARD_W * 0.55)) : 0;
+    const tMarginY = loose ? Math.max(20, Math.floor(CARD_H * 0.55)) : 0;
 
     for (let i=0;i<8;i++){
       const s = TopGeom.fSlots[i];
@@ -630,7 +634,8 @@
   }
 
   // ===== DEAL =====
-  function doDeal(){
+  async function doDeal(){
+    if (isAnimatingDeal) return;
     if (!stock.length) {
       render();
       updateUI();
@@ -656,15 +661,11 @@
     const dealt = [];
     for (let c=0;c<10;c++){
       if (!stock.length) break;
-      // ★ skip permanently anchored columns
       if (anchoredCols[c]) continue;
 
-      const col = tableau[c];
       const card = stock.pop();
       if (!card) break;
       card.faceUp = true;
-      col.push(card);
-      refreshAnchorForColumn(c);
       dealt.push({col:c, card});
     }
 
@@ -675,7 +676,26 @@
     }
 
     deals++;
-    undoStack.push({kind:'deal', payload:dealt});
+    undoStack.push({kind:'deal', payload:dealt.map(step=>({col:step.col, card:step.card}))});
+    isAnimatingDeal = true;
+    const newDealBtn = document.getElementById('newGame');
+    if (newDealBtn) newDealBtn.disabled = true;
+    updateUI(true);
+
+    const stepDelay = Math.max(90, Math.min(240, Math.floor(2400 / dealt.length)));
+    try {
+      for (let i=0;i<dealt.length;i++){
+        const step = dealt[i];
+        tableau[step.col].push(step.card);
+        refreshAnchorForColumn(step.col);
+        render();
+        if (i < dealt.length - 1) await sleep(stepDelay);
+      }
+    } finally {
+      isAnimatingDeal = false;
+      if (newDealBtn) newDealBtn.disabled = false;
+    }
+
     render();
     updateUI();
     checkWinOrStuck();
@@ -847,7 +867,7 @@
       if (!canPlaceOnFoundation(moving, drop.idx)) return null;
       const slot = TopGeom.fSlots[drop.idx];
       if (!slot) return null;
-      return { x: slot.x, y: slot.y, strength: 0.85 };
+      return { x: slot.x, y: slot.y, strength: 0.92 };
     }
 
     if (drop.type === 'tableau'){
@@ -863,7 +883,7 @@
         depth = Math.max(drag.from.idx, depth - drag.cards.length);
       }
       const snapY = tableauTopY() + depth * OVERLAP;
-      return { x: colX(drop.col), y: snapY, strength: 0.75 };
+      return { x: colX(drop.col), y: snapY, strength: 0.88 };
     }
 
     return null;
@@ -883,6 +903,7 @@
   function handlePrimaryDown(x, y){
     mouseX = x;
     mouseY = y;
+    if (isAnimatingDeal) return false;
     const hit = hitAt(x, y);
     if (!hit) return false;
 
@@ -1199,6 +1220,7 @@
   }
 
   document.getElementById('undo').addEventListener('click', ()=>{
+    if (isAnimatingDeal) return;
     if (!undoStack.length) return;
     const step = undoStack.pop();
     if (step.kind === 'deal'){
@@ -1237,6 +1259,7 @@
   });
 
   function hint(){
+    if (isAnimatingDeal) return;
     const tY = tableauTopY();
     for (let c=0;c<10;c++){
       const col = tableau[c];
@@ -1282,7 +1305,11 @@
     },120);
   }
 
-  document.getElementById('newGame').addEventListener('click', ()=>{ hideMessage(); newGame(); });
+  document.getElementById('newGame').addEventListener('click', ()=>{
+    if (isAnimatingDeal) return;
+    hideMessage();
+    newGame();
+  });
   document.getElementById('hint').addEventListener('click', hint);
   document.getElementById('playAgain').addEventListener('click', ()=>{ hideMessage(); newGame(); });
 
