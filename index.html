@@ -23,40 +23,53 @@
     }
     #app {
       width: min(1220px, 100%);
-      padding: 16px 24px 40px;
+      padding: 12px 20px 32px;
       box-sizing: border-box;
     }
     #hud {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 20px;
+      padding: 10px 18px;
       background: linear-gradient(180deg, rgba(35, 22, 13, 0.82) 0%, rgba(22, 12, 6, 0.88) 100%);
       border: 1px solid rgba(255, 222, 166, 0.28);
       border-radius: 18px;
       box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
-      margin-bottom: 4px;
+      margin-bottom: 6px;
       backdrop-filter: blur(2px);
     }
     #identity {
       display: flex;
-      flex-direction: column;
-      gap: 2px;
+      align-items: baseline;
+      gap: 12px;
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: #f7e7c4;
     }
+    #identity .title {
+      font-size: 18px;
+    }
     #identity .subtitle {
-      font-size: 11px;
-      color: rgba(247, 231, 196, 0.68);
+      font-size: 12px;
+      color: rgba(247, 231, 196, 0.7);
       letter-spacing: 0.2em;
     }
     #ui {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translate(-50%, -50%);
       display: flex;
-      gap: 12px;
+      gap: 10px;
       flex-wrap: wrap;
       justify-content: center;
+      background: rgba(23, 14, 7, 0.82);
+      border: 1px solid rgba(249, 212, 102, 0.38);
+      border-radius: 999px;
+      padding: 8px 18px;
+      box-shadow: 0 18px 32px rgba(0, 0, 0, 0.4);
+      pointer-events: none;
     }
     .btn {
       background: linear-gradient(180deg, rgba(71, 48, 24, 0.95) 0%, rgba(38, 23, 12, 0.95) 90%);
@@ -71,6 +84,7 @@
       cursor: pointer;
       transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
       box-shadow: 0 10px 18px rgba(0, 0, 0, 0.35);
+      pointer-events: auto;
     }
     .btn:hover:not(:disabled) {
       transform: translateY(-1px);
@@ -102,7 +116,7 @@
       position: relative;
       background: radial-gradient(circle at center, rgba(19, 10, 4, 0.86), rgba(13, 7, 3, 0.94));
       border-radius: 24px;
-      padding: 8px 22px 40px;
+      padding: 6px 22px 34px;
       box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.55), 0 24px 50px rgba(0, 0, 0, 0.55);
     }
     canvas {
@@ -146,7 +160,13 @@
         justify-content: center;
       }
       #boardArea {
-        padding: 8px 16px 34px;
+        padding: 8px 16px 30px;
+      }
+      #ui {
+        position: static;
+        transform: none;
+        margin: 12px auto 0;
+        pointer-events: none;
       }
     }
   </style>
@@ -155,14 +175,8 @@
   <div id="app">
     <header id="hud">
       <div id="identity">
-        <div>Devil's Six</div>
-        <div class="subtitle"><span id="version"></span></div>
-      </div>
-      <div id="ui">
-        <button id="newGame" class="btn">New Deal</button>
-        <button id="deal" class="btn">Deal</button>
-        <button id="hint" class="btn">Hint</button>
-        <button id="undo" class="btn">Undo</button>
+        <div class="title">Devil's Six</div>
+        <div class="subtitle" id="version"></div>
       </div>
       <div id="status">
         <div>Time <span id="time">00:00</span></div>
@@ -171,6 +185,11 @@
       </div>
     </header>
     <main id="boardArea">
+      <div id="ui">
+        <button id="newGame" class="btn">New Deal</button>
+        <button id="hint" class="btn">Hint</button>
+        <button id="undo" class="btn">Undo</button>
+      </div>
       <canvas id="game"></canvas>
       <div id="message">
         <div id="messageContent">
@@ -183,11 +202,12 @@
 
   <script>
   const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  const VERSION = '2.1';
+  const VERSION = '2.2';
   document.getElementById('version').textContent = `Version ${VERSION}`;
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
+  const controls = document.getElementById('ui');
   const SUITS = ['\u2660','\u2665','\u2666','\u2663'];
   const COLORS = { '\u2660':'black', '\u2663':'black', '\u2665':'red', '\u2666':'red' };
   const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
@@ -245,18 +265,18 @@
   }
   function tableauGutter(){
     const available = boardWidth - PADDING * 2 - CARD_W * 10;
-    return Math.max(6, Math.floor(available / 9));
+    return Math.max(4, Math.floor(available / 9));
   }
   function colX(c){ return PADDING + c * (CARD_W + tableauGutter()); }
   function tableauTopY(){
-    const top = TopGeom.fY + (CARD_H * TopGeom.fRows) + (TopGeom.fGapY * (TopGeom.fRows - 1)) + Math.max(12, Math.floor(CARD_H * 0.1));
-    return Math.max(top, CARD_H + Math.max(32, Math.floor(CARD_H * 0.22)));
+    const top = TopGeom.fY + (CARD_H * TopGeom.fRows) + (TopGeom.fGapY * (TopGeom.fRows - 1)) + Math.max(10, Math.floor(CARD_H * 0.08));
+    return Math.max(top, CARD_H + Math.max(26, Math.floor(CARD_H * 0.18)));
   }
   function computeTopGeometry(){
     TopGeom.dsY = PADDING;
     TopGeom.dsStep = Math.max(Math.floor(CARD_W * 0.32), 22);
     TopGeom.fGapX = Math.max(Math.floor(CARD_W * 0.18), 12);
-    TopGeom.fGapY = Math.max(Math.floor(CARD_H * 0.08), 10);
+    TopGeom.fGapY = Math.max(Math.floor(CARD_H * 0.07), 8);
     TopGeom.stockX = PADDING;
     TopGeom.stockY = TopGeom.dsY;
     const dsSlots = Math.max(devilsSix.length, 6);
@@ -300,6 +320,23 @@
     canvas.width = Math.floor(width * DPR);
     canvas.height = Math.floor(boardHeight * DPR);
     ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  function positionControls(){
+    if (!controls) return;
+    const dsSlots = Math.max(devilsSix.length, 6);
+    const dsRight = TopGeom.dsX + CARD_W + TopGeom.dsStep * (dsSlots - 1);
+    let fLeft = boardWidth - PADDING - CARD_W;
+    if (TopGeom.fSlots.length){
+      fLeft = TopGeom.fSlots[0].x;
+    }
+    const gap = Math.max(0, fLeft - dsRight);
+    const centerX = dsRight + gap / 2;
+    const minX = TopGeom.dsX + CARD_W + 24;
+    const maxX = Math.max(minX, boardWidth - PADDING - 24);
+    const clampedX = Math.max(minX, Math.min(centerX, maxX));
+    const verticalMid = TopGeom.fY + CARD_H * 0.55;
+    controls.style.left = `${clampedX}px`;
+    controls.style.top = `${verticalMid}px`;
   }
   function render(){
     syncBoardMetrics();
@@ -482,6 +519,7 @@
         drawCard(drag.cards[i], mouseX - CARD_W/2, mouseY - CARD_H/2 + i*OVERLAP, {ghost:true,highlight:true});
       }
     }
+    positionControls();
   }
 
   let drawPending = false;
@@ -702,14 +740,19 @@
     }
     for (const values of Object.values(suitRuns)){
       if (values.length < 3) continue;
+      values.sort((a,b)=>b-a);
       let run = 1;
+      let prev = values[0];
       for (let i=1;i<values.length;i++){
-        if (values[i] < values[i-1]){
+        const cur = values[i];
+        if (cur === prev) continue;
+        if (cur === prev - 1){
           run++;
           if (run >= 3) return true;
         } else {
           run = 1;
         }
+        prev = cur;
       }
     }
     return false;
@@ -771,7 +814,6 @@
   }
 
   function updateUI(disable=false){
-    document.getElementById('deal').disabled = disable || stock.length===0;
     document.getElementById('undo').disabled = disable || undoStack.length===0;
     document.getElementById('hint').disabled = disable;
   }
@@ -1194,7 +1236,6 @@
   }
 
   document.getElementById('newGame').addEventListener('click', ()=>{ hideMessage(); newGame(); });
-  document.getElementById('deal').addEventListener('click', doDeal);
   document.getElementById('hint').addEventListener('click', hint);
   document.getElementById('playAgain').addEventListener('click', ()=>{ hideMessage(); newGame(); });
 
