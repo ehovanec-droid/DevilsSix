@@ -29,31 +29,34 @@
     #hud {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 10px 18px;
+      justify-content: center;
+      padding: 6px 14px;
       background: linear-gradient(180deg, rgba(35, 22, 13, 0.82) 0%, rgba(22, 12, 6, 0.88) 100%);
       border: 1px solid rgba(255, 222, 166, 0.28);
-      border-radius: 18px;
-      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
-      margin-bottom: 6px;
+      border-radius: 14px;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+      margin-bottom: 4px;
       backdrop-filter: blur(2px);
+      max-width: 320px;
+      margin-left: auto;
+      margin-right: auto;
     }
     #identity {
       display: flex;
       align-items: baseline;
-      gap: 12px;
+      gap: 8px;
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: #f7e7c4;
     }
     #identity .title {
-      font-size: 18px;
+      font-size: 17px;
     }
     #identity .subtitle {
-      font-size: 12px;
+      font-size: 11px;
       color: rgba(247, 231, 196, 0.7);
-      letter-spacing: 0.2em;
+      letter-spacing: 0.18em;
     }
     #ui {
       position: absolute;
@@ -96,27 +99,11 @@
       cursor: not-allowed;
       box-shadow: none;
     }
-    #status {
-      display: flex;
-      gap: 18px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      font-size: 13px;
-      color: #f4e3bd;
-    }
-    #status span {
-      display: inline-block;
-      min-width: 48px;
-      text-align: right;
-      font-variant-numeric: tabular-nums;
-      color: #fff5d1;
-    }
     #boardArea {
       position: relative;
       background: radial-gradient(circle at center, rgba(19, 10, 4, 0.86), rgba(13, 7, 3, 0.94));
       border-radius: 24px;
-      padding: 6px 22px 34px;
+      padding: 2px 22px 30px;
       box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.55), 0 24px 50px rgba(0, 0, 0, 0.55);
     }
     canvas {
@@ -153,14 +140,11 @@
     @media (max-width: 780px) {
       #hud {
         flex-direction: column;
-        gap: 18px;
-        align-items: stretch;
-      }
-      #status {
-        justify-content: center;
+        gap: 12px;
+        align-items: center;
       }
       #boardArea {
-        padding: 8px 16px 30px;
+        padding: 6px 16px 28px;
       }
       #ui {
         position: static;
@@ -177,11 +161,6 @@
       <div id="identity">
         <div class="title">Devil's Six</div>
         <div class="subtitle" id="version"></div>
-      </div>
-      <div id="status">
-        <div>Time <span id="time">00:00</span></div>
-        <div>Deals <span id="deals">0</span></div>
-        <div>Career <span id="careerScore">0</span></div>
       </div>
     </header>
     <main id="boardArea">
@@ -202,7 +181,7 @@
 
   <script>
   const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  const VERSION = '2.2';
+  const VERSION = '2.3';
   document.getElementById('version').textContent = `Version ${VERSION}`;
 
   const canvas = document.getElementById('game');
@@ -213,7 +192,7 @@
   const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
   const RVAL  = { A:1, J:11, Q:12, K:13 };
   for (let i=2;i<=10;i++) RVAL[i]=i;
-  const PADDING = 18;
+  const PADDING = 16;
 
   class Card {
     constructor(suit, rank){
@@ -231,11 +210,7 @@
   let stock = [];
   let deck = [];
   let deals = 0;
-  let timeStart = 0;
-  let timer = null;
   let undoStack = [];
-  let career = +localStorage.getItem('careerScore') || 0;
-  document.getElementById('careerScore').textContent = career;
 
   // ★ NEW: track which tableau columns have had a king planted
   let anchoredCols = new Array(10).fill(false);
@@ -261,24 +236,38 @@
   function layout(w){
     CARD_W = Math.max(56, Math.min(94, Math.floor((w - PADDING * 2) / 14)));
     CARD_H = Math.floor(CARD_W * 1.52);
-    OVERLAP = Math.floor(CARD_H * 0.18);
+    OVERLAP = Math.floor(CARD_H * 0.22);
   }
   function tableauGutter(){
     const available = boardWidth - PADDING * 2 - CARD_W * 10;
     return Math.max(4, Math.floor(available / 9));
   }
   function colX(c){ return PADDING + c * (CARD_W + tableauGutter()); }
+  function shouldAnchorColumn(col){
+    if (!col.length) return false;
+    for (let i=0;i<col.length;i++) if (!col[i].faceUp) return false;
+    const base = col[0];
+    return base && base.faceUp && base.value === 13;
+  }
+  function refreshAnchorForColumn(idx){
+    anchoredCols[idx] = shouldAnchorColumn(tableau[idx]);
+  }
+  function refreshAllAnchors(){
+    for (let i=0;i<tableau.length;i++) refreshAnchorForColumn(i);
+  }
   function tableauTopY(){
-    const top = TopGeom.fY + (CARD_H * TopGeom.fRows) + (TopGeom.fGapY * (TopGeom.fRows - 1)) + Math.max(10, Math.floor(CARD_H * 0.08));
-    return Math.max(top, CARD_H + Math.max(26, Math.floor(CARD_H * 0.18)));
+    const top = TopGeom.fY + (CARD_H * TopGeom.fRows) + (TopGeom.fGapY * (TopGeom.fRows - 1)) + Math.max(6, Math.floor(CARD_H * 0.06));
+    return Math.max(top, CARD_H + Math.max(20, Math.floor(CARD_H * 0.16)));
   }
   function computeTopGeometry(){
-    TopGeom.dsY = PADDING;
+    const topBand = Math.max(6, Math.floor(CARD_H * 0.045));
+    TopGeom.dsY = topBand;
     TopGeom.dsStep = Math.max(Math.floor(CARD_W * 0.32), 22);
     TopGeom.fGapX = Math.max(Math.floor(CARD_W * 0.18), 12);
-    TopGeom.fGapY = Math.max(Math.floor(CARD_H * 0.07), 8);
+    TopGeom.fGapY = Math.max(Math.floor(CARD_H * 0.06), 6);
     TopGeom.stockX = PADDING;
     TopGeom.stockY = TopGeom.dsY;
+    TopGeom.fY = Math.max(4, topBand + Math.max(Math.floor(CARD_H * 0.02), 2));
     const dsSlots = Math.max(devilsSix.length, 6);
     const dsWidth = CARD_W + TopGeom.dsStep * (dsSlots - 1);
     TopGeom.dsX = TopGeom.stockX + CARD_W + Math.max(28, Math.floor(CARD_W * 0.6));
@@ -334,7 +323,7 @@
     const minX = TopGeom.dsX + CARD_W + 24;
     const maxX = Math.max(minX, boardWidth - PADDING - 24);
     const clampedX = Math.max(minX, Math.min(centerX, maxX));
-    const verticalMid = TopGeom.fY + CARD_H * 0.55;
+    const verticalMid = TopGeom.fY + CARD_H * 0.48;
     controls.style.left = `${clampedX}px`;
     controls.style.top = `${verticalMid}px`;
   }
@@ -601,6 +590,7 @@
     const colArr = tableau[col];
     if (colArr.length && !colArr[colArr.length-1].faceUp)
       colArr[colArr.length-1].faceUp = true;
+    refreshAnchorForColumn(col);
   }
   function canStartDragAt(col, row){
     const colArr = tableau[col];
@@ -617,6 +607,8 @@
       updateUI();
       return;
     }
+
+    refreshAllAnchors();
 
     // if ALL columns are anchored-by-king, don't deal
     let allAnchored = true;
@@ -643,6 +635,7 @@
       if (!card) break;
       card.faceUp = true;
       col.push(card);
+      refreshAnchorForColumn(c);
       dealt.push({col:c, card});
     }
 
@@ -653,7 +646,6 @@
     }
 
     deals++;
-    document.getElementById('deals').textContent = deals;
     undoStack.push({kind:'deal', payload:dealt});
     render();
     updateUI();
@@ -695,11 +687,6 @@
   }
   function finishGame(win){
     if (win){
-      const secs = Math.floor((Date.now()-timeStart)/1000);
-      const score = Math.max(50, 1000 - deals*100 - Math.floor(secs/10));
-      career += score;
-      localStorage.setItem('careerScore', career);
-      document.getElementById('careerScore').textContent = career;
       showMessage('Victory! Foundations complete.');
     } else {
       showMessage('No more moves.');
@@ -798,17 +785,8 @@
 
     stock = deck;
     deals = 0;
-    document.getElementById('deals').textContent = deals;
 
-    timeStart = Date.now();
-    if (timer) clearInterval(timer);
-    timer = setInterval(()=>{
-      const s = Math.floor((Date.now()-timeStart)/1000);
-      const m = (s/60|0).toString().padStart(2,'0');
-      const ss = (s%60).toString().padStart(2,'0');
-      document.getElementById('time').textContent = `${m}:${ss}`;
-    },1000);
-
+    refreshAllAnchors();
     updateUI();
     render();
   }
@@ -821,7 +799,6 @@
     document.getElementById('messageText').textContent = t;
     document.getElementById('message').style.display = 'flex';
     updateUI(true);
-    if (timer) clearInterval(timer);
   }
   function hideMessage(){ document.getElementById('message').style.display = 'none'; }
 
@@ -971,44 +948,28 @@
         const run = drag.cards.slice();
         const toCol = drop.col;
         const fromCol = drag.from.col;
-
-        const wasAnchoredBefore = anchoredCols[toCol]; // ★ capture old state
-
         tableau[toCol].push(...run);
         tableau[fromCol].splice(drag.from.idx, run.length);
+        refreshAnchorForColumn(toCol);
         flipTop(fromCol);
-
-        // ★ if we placed a KING onto an EMPTY column, per your rule, anchor it forever
-        if (wasAnchoredBefore === false && tableau[toCol].length === run.length) {
-          // column was empty before this move
-          if (run[0].faceUp && run[0].value === 13) {
-            anchoredCols[toCol] = true;
-          }
-        }
 
         undoStack.push({
           kind:'tab2tab',
           from:{col:fromCol, idx:drag.from.idx},
           toCol:toCol,
-          count:run.length,
-          // ★ store previous anchor state so undo can restore it
-          prevAnchored: wasAnchoredBefore
+          count:run.length
         });
         moved = true;
       }
       else if (drop.type === 'tableau' && drag.from.type === 'devils' && canPlaceOnTableau(moving, drop.col)){
         const toCol = drop.col;
-        const prevAnchored = anchoredCols[toCol];
         tableau[toCol].push(moving);
         devilsSix.splice(drag.from.idx,1);
-        if (prevAnchored === false && tableau[toCol].length === 1 && moving.faceUp && moving.value === 13){
-          anchoredCols[toCol] = true;
-        }
+        refreshAnchorForColumn(toCol);
         undoStack.push({
           kind:'devils2tab',
           toCol,
-          fromIdx: drag.from.idx,
-          prevAnchored
+          fromIdx: drag.from.idx
         });
         moved = true;
       }
@@ -1153,34 +1114,32 @@
     if (!undoStack.length) return;
     const step = undoStack.pop();
     if (step.kind === 'deal'){
+      const touched = new Set();
       for (let i=step.payload.length-1;i>=0;i--){
         const {col,card} = step.payload[i];
         tableau[col].pop();
         card.faceUp = false;
         stock.push(card);
+        touched.add(col);
       }
       deals = Math.max(0, deals-1);
-      document.getElementById('deals').textContent = deals;
+      touched.forEach(refreshAnchorForColumn);
     } else if (step.kind === 'tab2tab'){
       const moved = tableau[step.toCol].splice(-step.count, step.count);
       tableau[step.from.col].splice(step.from.idx, 0, ...moved);
+      refreshAnchorForColumn(step.toCol);
       flipTop(step.from.col);
-      // ★ restore anchored flag for target column
-      if (typeof step.prevAnchored === 'boolean') {
-        anchoredCols[step.toCol] = step.prevAnchored;
-      }
     } else if (step.kind === 'devils2tab'){
       const card = tableau[step.toCol].pop();
       if (card){
         devilsSix.splice(step.fromIdx,0,card);
       }
-      if (typeof step.prevAnchored === 'boolean') {
-        anchoredCols[step.toCol] = step.prevAnchored;
-      }
+      refreshAnchorForColumn(step.toCol);
     } else if (step.kind === 'toFound'){
       const card = foundations[step.fIdx].pop();
       if (step.from.type === 'tableau'){
         tableau[step.from.col].splice(step.from.idx,0,card);
+        refreshAnchorForColumn(step.from.col);
       } else {
         devilsSix.splice(step.from.idx,0,card);
       }
