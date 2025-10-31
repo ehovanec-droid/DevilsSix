@@ -31,10 +31,7 @@
       box-sizing: border-box;
     }
     #hud {
-      position: absolute;
-      top: 18px;
-      left: 50%;
-      transform: translateX(-50%);
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -44,11 +41,12 @@
       border: 1px solid rgba(255, 222, 166, 0.32);
       border-radius: 18px;
       box-shadow: 0 18px 38px rgba(0, 0, 0, 0.4);
-      margin: 0;
+      margin: 0 auto 4px;
       backdrop-filter: blur(2px);
-      max-width: min(520px, 100%);
+      width: min(520px, 100%);
+      align-self: center;
       pointer-events: auto;
-      z-index: 2;
+      z-index: 0;
       flex-wrap: wrap;
     }
     #identity {
@@ -113,12 +111,12 @@
       position: relative;
       background: radial-gradient(circle at center, rgba(19, 10, 4, 0.86), rgba(13, 7, 3, 0.94));
       border-radius: 24px;
-      padding: 36px 22px 30px;
+      padding: 30px 22px 30px;
       box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.55), 0 24px 50px rgba(0, 0, 0, 0.55);
       display: flex;
       flex-direction: column;
-      align-items: center;
-      gap: 12px;
+      align-items: stretch;
+      gap: 18px;
     }
     canvas {
       display: block;
@@ -152,11 +150,11 @@
       color: #ffecc4;
     }
     @media (max-width: 780px) {
+      #boardArea {
+        padding: 18px 16px 28px;
+        gap: 14px;
+      }
       #hud {
-        position: static;
-        top: auto;
-        left: auto;
-        transform: none;
         margin: 6px auto 0;
         flex-direction: column;
         gap: 10px;
@@ -170,9 +168,6 @@
       #hudButtons {
         width: 100%;
         justify-content: center;
-      }
-      #boardArea {
-        padding: 14px 16px 28px;
       }
     }
   </style>
@@ -983,13 +978,48 @@
     return { x: clientX - r.left, y: clientY - r.top };
   }
 
+  function computeTableauSnapTarget(moving, drop, x, y){
+    if (!moving) return null;
+    const fromCol = drag && drag.from && drag.from.type === 'tableau' ? drag.from.col : null;
+
+    if (drop && drop.type === 'tableau'){
+      if (!canPlaceOnTableau(moving, drop.col)) return null;
+      if (fromCol !== null && drop.col === fromCol && drop.row >= drag.from.idx) return null;
+      let depth = drop.row >= 0 ? drop.row + 1 : tableau[drop.col].length;
+      if (fromCol !== null && drop.col === fromCol){
+        depth = Math.max(drag.from.idx, depth - drag.cards.length);
+      }
+      const snapY = tableauTopY() + depth * OVERLAP;
+      return { x: colX(drop.col), y: snapY, target: { type: 'tableau', col: drop.col }, strength: 0.88 };
+    }
+
+    let best = null;
+    const topY = tableauTopY();
+    for (let col = 0; col < tableau.length; col++){
+      if (fromCol !== null && col === fromCol) continue;
+      if (!canPlaceOnTableau(moving, col)) continue;
+      const baseX = colX(col);
+      const centerX = baseX + CARD_W / 2;
+      const dx = Math.abs(x - centerX);
+      const dy = y < topY ? topY - y : 0;
+      const score = dx * dx + dy * dy * 0.35;
+      if (!best || score < best.score){
+        best = { col, score };
+      }
+    }
+
+    if (!best) return null;
+    const depth = tableau[best.col].length;
+    const snapY = tableauTopY() + depth * OVERLAP;
+    return { x: colX(best.col), y: snapY, target: { type: 'tableau', col: best.col }, strength: 0.82 };
+  }
+
   function computeDragSnap(x, y){
     if (!drag) return null;
     const drop = hitAt(x, y, true);
-    if (!drop) return null;
     const moving = drag.cards[0];
 
-    if (drop.type === 'foundation'){
+    if (drop && drop.type === 'foundation'){
       if (drag.cards.length !== 1) return null;
       if (!canPlaceOnFoundation(moving, drop.idx)) return null;
       const slot = TopGeom.fSlots[drop.idx];
@@ -997,23 +1027,8 @@
       return { x: slot.x, y: slot.y, strength: 0.92, target: { type: 'foundation', idx: drop.idx } };
     }
 
-    if (drop.type === 'tableau'){
-      if (!canPlaceOnTableau(moving, drop.col)) return null;
-      if (drag.from.type === 'tableau' && drop.col === drag.from.col && drop.row >= drag.from.idx) return null;
-      let depth;
-      if (drop.row >= 0){
-        depth = drop.row + 1;
-      } else {
-        depth = tableau[drop.col].length;
-      }
-      if (drag.from.type === 'tableau' && drop.col === drag.from.col && depth > drag.from.idx){
-        depth = Math.max(drag.from.idx, depth - drag.cards.length);
-      }
-      const snapY = tableauTopY() + depth * OVERLAP;
-      return { x: colX(drop.col), y: snapY, strength: 0.88, target: { type: 'tableau', col: drop.col } };
-    }
-
-    return null;
+    const tableSnap = computeTableauSnapTarget(moving, drop, x, y);
+    return tableSnap;
   }
 
   function handlePrimaryMove(x, y){
@@ -1177,6 +1192,10 @@
   });
 
   const supportsPointer = 'PointerEvent' in window;
+  let lastMouseClickTime = 0;
+  let lastMouseClickPos = null;
+  const CLICK_INTERVAL = 320;
+  const CLICK_SLOP_SQ = 24 * 24;
   if (supportsPointer){
     let activePointerId = null;
     let tapCandidate = null;
@@ -1262,6 +1281,32 @@
           registerTap(candidate.lastPos);
         }
       }
+      if (e.pointerType === 'mouse' && movedByDrag){
+        lastMouseClickTime = 0;
+        lastMouseClickPos = null;
+      }
+      if (e.pointerType === 'mouse' && !movedByDrag){
+        const now = performance.now();
+        if (lastMouseClickPos && now - lastMouseClickTime <= CLICK_INTERVAL){
+          const dx = pos.x - lastMouseClickPos.x;
+          const dy = pos.y - lastMouseClickPos.y;
+          if (dx * dx + dy * dy <= CLICK_SLOP_SQ){
+            if (attemptAutoFoundationAt(pos.x, pos.y)){
+              lastMouseClickTime = 0;
+              lastMouseClickPos = null;
+            } else {
+              lastMouseClickTime = now;
+              lastMouseClickPos = { x: pos.x, y: pos.y };
+            }
+          } else {
+            lastMouseClickTime = now;
+            lastMouseClickPos = { x: pos.x, y: pos.y };
+          }
+        } else {
+          lastMouseClickTime = now;
+          lastMouseClickPos = { x: pos.x, y: pos.y };
+        }
+      }
       if (e.pointerType !== 'mouse') e.preventDefault();
     };
     canvas.addEventListener('pointerup', finishPointer, {passive:false});
@@ -1295,7 +1340,27 @@
     });
     window.addEventListener('mouseup', e=>{
       const pos = getCanvasPos(e.clientX, e.clientY);
-      handlePrimaryUp(pos.x, pos.y);
+      const moved = handlePrimaryUp(pos.x, pos.y);
+      if (e.button !== 0) return;
+      if (!moved){
+        const now = performance.now();
+        if (lastMouseClickPos && now - lastMouseClickTime <= CLICK_INTERVAL){
+          const dx = pos.x - lastMouseClickPos.x;
+          const dy = pos.y - lastMouseClickPos.y;
+          if (dx * dx + dy * dy <= CLICK_SLOP_SQ){
+            if (attemptAutoFoundationAt(pos.x, pos.y)){
+              lastMouseClickTime = 0;
+              lastMouseClickPos = null;
+              return;
+            }
+          }
+        }
+        lastMouseClickTime = now;
+        lastMouseClickPos = { x: pos.x, y: pos.y };
+      } else {
+        lastMouseClickTime = 0;
+        lastMouseClickPos = null;
+      }
     });
 
     let activeTouchId = null;
