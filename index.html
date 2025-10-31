@@ -98,6 +98,7 @@
   <script>
   const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
   const canvas = document.getElementById('game');
+  canvas.style.touchAction = 'none';
   const ctx = canvas.getContext('2d');
   const SUITS = ['\u2660','\u2665','\u2666','\u2663'];
   const COLORS = { '\u2660':'black', '\u2663':'black', '\u2665':'red', '\u2666':'red' };
@@ -531,18 +532,21 @@
   }
   function hideMessage(){ document.getElementById('message').style.display = 'none'; }
 
-  canvas.addEventListener('mousemove', e=>{
+  function getCanvasPos(clientX, clientY){
     const r = canvas.getBoundingClientRect();
-    mouseX = e.clientX - r.left;
-    mouseY = e.clientY - r.top;
-    if (drag) draw();
-  });
+    return { x: clientX - r.left, y: clientY - r.top };
+  }
 
-  canvas.addEventListener('mousedown', e=>{
-    const r = canvas.getBoundingClientRect();
-    mouseX = e.clientX - r.left;
-    mouseY = e.clientY - r.top;
-    const hit = hitAt(mouseX, mouseY);
+  function handlePrimaryMove(x, y){
+    mouseX = x;
+    mouseY = y;
+    if (drag) draw();
+  }
+
+  function handlePrimaryDown(x, y){
+    mouseX = x;
+    mouseY = y;
+    const hit = hitAt(x, y);
     if (!hit) return;
 
     if (hit.type === 'stock'){
@@ -640,13 +644,16 @@
       draw();
       return;
     }
-  });
+  }
 
-  window.addEventListener('mouseup', e=>{
-    if (!drag) return;
-    const r = canvas.getBoundingClientRect();
-    mouseX = e.clientX - r.left;
-    mouseY = e.clientY - r.top;
+  function handlePrimaryUp(x, y){
+    if (!drag){
+      mouseX = x;
+      mouseY = y;
+      return;
+    }
+    mouseX = x;
+    mouseY = y;
     const drop = hitAt(mouseX, mouseY);
     const moving = drag.cards[0];
     let moved = false;
@@ -702,7 +709,109 @@
       updateUI();
       checkWinOrStuck();
     }
-  });
+  }
+
+  function cancelDrag(){
+    if (drag){
+      drag = null;
+      draw();
+    }
+  }
+
+  canvas.addEventListener('contextmenu', e=> e.preventDefault());
+
+  const supportsPointer = 'PointerEvent' in window;
+  if (supportsPointer){
+    let activePointerId = null;
+    canvas.addEventListener('pointerdown', e=>{
+      if (activePointerId !== null) return;
+      const pos = getCanvasPos(e.clientX, e.clientY);
+      handlePrimaryDown(pos.x, pos.y);
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+      activePointerId = e.pointerId;
+      e.preventDefault();
+    });
+    canvas.addEventListener('pointermove', e=>{
+      if (activePointerId !== e.pointerId) return;
+      const pos = getCanvasPos(e.clientX, e.clientY);
+      handlePrimaryMove(pos.x, pos.y);
+    });
+    const finishPointer = e=>{
+      if (activePointerId !== e.pointerId) return;
+      const pos = getCanvasPos(e.clientX, e.clientY);
+      handlePrimaryUp(pos.x, pos.y);
+      activePointerId = null;
+      try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+    };
+    window.addEventListener('pointerup', finishPointer);
+    window.addEventListener('pointercancel', e=>{
+      if (activePointerId !== e.pointerId) return;
+      activePointerId = null;
+      try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+      cancelDrag();
+    });
+  } else {
+    canvas.addEventListener('mousemove', e=>{
+      const pos = getCanvasPos(e.clientX, e.clientY);
+      handlePrimaryMove(pos.x, pos.y);
+    });
+    canvas.addEventListener('mousedown', e=>{
+      const pos = getCanvasPos(e.clientX, e.clientY);
+      handlePrimaryDown(pos.x, pos.y);
+    });
+    window.addEventListener('mouseup', e=>{
+      const pos = getCanvasPos(e.clientX, e.clientY);
+      handlePrimaryUp(pos.x, pos.y);
+    });
+
+    let activeTouchId = null;
+    canvas.addEventListener('touchstart', e=>{
+      if (activeTouchId !== null) return;
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      const pos = getCanvasPos(touch.clientX, touch.clientY);
+      activeTouchId = touch.identifier;
+      handlePrimaryDown(pos.x, pos.y);
+      e.preventDefault();
+    }, {passive:false});
+    window.addEventListener('touchmove', e=>{
+      if (activeTouchId === null) return;
+      for (let i=0;i<e.changedTouches.length;i++){
+        const touch = e.changedTouches[i];
+        if (touch.identifier === activeTouchId){
+          const pos = getCanvasPos(touch.clientX, touch.clientY);
+          handlePrimaryMove(pos.x, pos.y);
+          e.preventDefault();
+          break;
+        }
+      }
+    }, {passive:false});
+    const finishTouch = e=>{
+      if (activeTouchId === null) return;
+      for (let i=0;i<e.changedTouches.length;i++){
+        const touch = e.changedTouches[i];
+        if (touch.identifier === activeTouchId){
+          const pos = getCanvasPos(touch.clientX, touch.clientY);
+          handlePrimaryUp(pos.x, pos.y);
+          activeTouchId = null;
+          e.preventDefault();
+          break;
+        }
+      }
+    };
+    window.addEventListener('touchend', finishTouch, {passive:false});
+    window.addEventListener('touchcancel', e=>{
+      if (activeTouchId === null) return;
+      for (let i=0;i<e.changedTouches.length;i++){
+        const touch = e.changedTouches[i];
+        if (touch.identifier === activeTouchId){
+          activeTouchId = null;
+          cancelDrag();
+          break;
+        }
+      }
+    });
+  }
 
   document.getElementById('undo').addEventListener('click', ()=>{
     if (!undoStack.length) return;
