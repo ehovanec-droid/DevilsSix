@@ -444,20 +444,18 @@
         ctx.fillStyle = primary;
         ctx.fillRect(0,0,CARD_W,CARD_H);
 
-        const stripeStep = Math.max(10, Math.floor(CARD_W/4.2));
-        ctx.lineWidth = Math.max(1, CARD_W * 0.015);
-        for (let offset=-CARD_W; offset<CARD_W*2; offset+=stripeStep){
-          ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-          ctx.beginPath();
-          ctx.moveTo(offset, -CARD_H);
-          ctx.lineTo(offset + CARD_H, CARD_H*2);
-          ctx.stroke();
-          ctx.strokeStyle = 'rgba(12,22,54,0.45)';
-          ctx.beginPath();
-          ctx.moveTo(offset + stripeStep/2, -CARD_H);
-          ctx.lineTo(offset + stripeStep/2 + CARD_H, CARD_H*2);
-          ctx.stroke();
-        }
+        const sheen = ctx.createRadialGradient(CARD_W*0.3, CARD_H*0.25, CARD_W*0.1, CARD_W*0.3, CARD_H*0.25, CARD_W);
+        sheen.addColorStop(0, 'rgba(255,255,255,0.28)');
+        sheen.addColorStop(0.45, 'rgba(255,255,255,0.12)');
+        sheen.addColorStop(1, 'rgba(16,42,90,0.05)');
+        ctx.fillStyle = sheen;
+        ctx.fillRect(0,0,CARD_W,CARD_H);
+
+        const emblem = ctx.createRadialGradient(CARD_W/2, CARD_H/2, CARD_W*0.1, CARD_W/2, CARD_H/2, CARD_W*0.52);
+        emblem.addColorStop(0, 'rgba(8,18,48,0.45)');
+        emblem.addColorStop(1, 'rgba(8,18,48,0)');
+        ctx.fillStyle = emblem;
+        ctx.fillRect(0,0,CARD_W,CARD_H);
         ctx.restore();
         ctx.lineWidth = 1.4;
         ctx.strokeStyle = 'rgba(255,255,255,0.32)';
