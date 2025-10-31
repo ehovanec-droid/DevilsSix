@@ -23,34 +23,34 @@
     }
     #app {
       width: min(1220px, 100%);
-      padding: 32px 32px 64px;
+      padding: 16px 24px 40px;
       box-sizing: border-box;
     }
     #hud {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 18px 24px;
+      padding: 12px 20px;
       background: linear-gradient(180deg, rgba(35, 22, 13, 0.82) 0%, rgba(22, 12, 6, 0.88) 100%);
       border: 1px solid rgba(255, 222, 166, 0.28);
       border-radius: 18px;
       box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
-      margin-bottom: 28px;
+      margin-bottom: 4px;
       backdrop-filter: blur(2px);
     }
     #identity {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 2px;
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: #f7e7c4;
     }
     #identity .subtitle {
-      font-size: 12px;
-      color: rgba(247, 231, 196, 0.75);
-      letter-spacing: 0.16em;
+      font-size: 11px;
+      color: rgba(247, 231, 196, 0.68);
+      letter-spacing: 0.2em;
     }
     #ui {
       display: flex;
@@ -101,15 +101,15 @@
     #boardArea {
       position: relative;
       background: radial-gradient(circle at center, rgba(19, 10, 4, 0.86), rgba(13, 7, 3, 0.94));
-      border-radius: 26px;
-      padding: 28px 28px 60px;
+      border-radius: 24px;
+      padding: 8px 22px 40px;
       box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.55), 0 24px 50px rgba(0, 0, 0, 0.55);
     }
     canvas {
       display: block;
       width: 100%;
       height: auto;
-      touch-action: pan-y;
+      touch-action: none;
     }
     #message {
       position: absolute;
@@ -159,7 +159,7 @@
         justify-content: center;
       }
       #boardArea {
-        padding: 22px 18px 48px;
+        padding: 8px 16px 34px;
       }
     }
   </style>
@@ -169,7 +169,7 @@
     <header id="hud">
       <div id="identity">
         <div>Devil's Six</div>
-        <div class="subtitle">Churchill Solitaire</div>
+        <div class="subtitle"><span id="version"></span></div>
       </div>
       <div id="ui">
         <button id="newGame" class="btn">New Deal</button>
@@ -197,6 +197,9 @@
 
   <script>
   const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  const VERSION = '2.1';
+  document.getElementById('version').textContent = `Version ${VERSION}`;
+
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const SUITS = ['\u2660','\u2665','\u2666','\u2663'];
@@ -204,7 +207,7 @@
   const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
   const RVAL  = { A:1, J:11, Q:12, K:13 };
   for (let i=2;i<=10;i++) RVAL[i]=i;
-  const PADDING = 36;
+  const PADDING = 18;
 
   class Card {
     constructor(suit, rank){
@@ -231,14 +234,14 @@
   // ★ NEW: track which tableau columns have had a king planted
   let anchoredCols = new Array(10).fill(false);
 
-  let CARD_W = 80, CARD_H = 120, OVERLAP = 26;
+  let CARD_W = 80, CARD_H = 120, OVERLAP = 22;
   let boardWidth = 0;
   let boardHeight = 0;
 
   const TopGeom = {
     dsX: PADDING,
     dsY: PADDING,
-    dsGap: 18,
+    dsStep: 26,
     stockX: 0,
     stockY: 0,
     fSlots: [],
@@ -252,7 +255,7 @@
   function layout(w){
     CARD_W = Math.max(56, Math.min(94, Math.floor((w - PADDING * 2) / 14)));
     CARD_H = Math.floor(CARD_W * 1.52);
-    OVERLAP = Math.floor(CARD_H * 0.22);
+    OVERLAP = Math.floor(CARD_H * 0.18);
   }
   function tableauGutter(){
     const available = boardWidth - PADDING * 2 - CARD_W * 10;
@@ -260,17 +263,18 @@
   }
   function colX(c){ return PADDING + c * (CARD_W + tableauGutter()); }
   function tableauTopY(){
-    const top = TopGeom.fY + (CARD_H * TopGeom.fRows) + (TopGeom.fGapY * (TopGeom.fRows - 1)) + 42;
-    return Math.max(top, CARD_H + 52);
+    const top = TopGeom.fY + (CARD_H * TopGeom.fRows) + (TopGeom.fGapY * (TopGeom.fRows - 1)) + Math.max(12, Math.floor(CARD_H * 0.1));
+    return Math.max(top, CARD_H + Math.max(32, Math.floor(CARD_H * 0.22)));
   }
   function computeTopGeometry(){
     TopGeom.dsY = PADDING;
-    TopGeom.dsGap = Math.max(Math.floor(CARD_W * 0.16), 14);
-    TopGeom.fGapX = Math.max(Math.floor(CARD_W * 0.18), 14);
-    TopGeom.fGapY = Math.max(Math.floor(CARD_H * 0.1), 14);
+    TopGeom.dsStep = Math.max(Math.floor(CARD_W * 0.32), 22);
+    TopGeom.fGapX = Math.max(Math.floor(CARD_W * 0.18), 12);
+    TopGeom.fGapY = Math.max(Math.floor(CARD_H * 0.08), 10);
     TopGeom.stockX = PADDING;
     TopGeom.stockY = TopGeom.dsY;
-    const dsWidth = CARD_W * Math.max(devilsSix.length, 6) + TopGeom.dsGap * (Math.max(devilsSix.length, 6) - 1);
+    const dsSlots = Math.max(devilsSix.length, 6);
+    const dsWidth = CARD_W + TopGeom.dsStep * (dsSlots - 1);
     TopGeom.dsX = TopGeom.stockX + CARD_W + Math.max(28, Math.floor(CARD_W * 0.6));
 
     const totalFW = TopGeom.fCols * CARD_W + (TopGeom.fCols - 1) * TopGeom.fGapX;
@@ -374,13 +378,19 @@
         ctx.fillStyle = faceGradient;
         ctx.fill();
 
+        const cornerInsetX = Math.floor(CARD_W * 0.12);
+        const cornerInsetY = Math.floor(CARD_H * 0.08);
         ctx.fillStyle = card.color === 'red' ? '#c93434' : '#111111';
         ctx.textBaseline = 'top';
         ctx.textAlign = 'left';
         ctx.font = `700 ${Math.floor(CARD_W/4.1)}px "Avenir Next", "Segoe UI", sans-serif`;
-        ctx.fillText(card.rank, Math.floor(CARD_W*0.12), Math.floor(CARD_H*0.08));
+        ctx.fillText(card.rank, cornerInsetX, cornerInsetY);
         ctx.font = `${Math.floor(CARD_W/4.8)}px "Avenir Next", "Segoe UI", sans-serif`;
-        ctx.fillText(card.suit, Math.floor(CARD_W*0.12), Math.floor(CARD_H*0.32));
+        ctx.fillText(card.suit, cornerInsetX, Math.floor(CARD_H*0.32));
+
+        ctx.textAlign = 'right';
+        ctx.font = `${Math.floor(CARD_W/5.3)}px "Avenir Next", "Segoe UI", sans-serif`;
+        ctx.fillText(card.suit, CARD_W - cornerInsetX, cornerInsetY);
 
         ctx.save();
         ctx.translate(CARD_W - Math.floor(CARD_W*0.12), CARD_H - Math.floor(CARD_H*0.08));
@@ -454,7 +464,7 @@
     for (let i=0;i<dsSlots;i++){
       const isDraggingDevil = drag && drag.from.type === 'devils' && drag.from.idx === i;
       const card = (!isDraggingDevil && devilsSix[i]) ? devilsSix[i] : null;
-      drawCard(card, TopGeom.dsX + i*(CARD_W + TopGeom.dsGap), TopGeom.dsY, {empty:!card});
+      drawCard(card, TopGeom.dsX + i*TopGeom.dsStep, TopGeom.dsY, {empty:!card});
     }
     drawCard(stock.length ? {faceUp:false} : null, TopGeom.stockX, TopGeom.stockY);
     stockHit = {x:TopGeom.stockX, y:TopGeom.stockY, w:CARD_W, h:CARD_H};
@@ -488,6 +498,16 @@
     }
   }
 
+  let drawPending = false;
+  function queueDraw(){
+    if (drawPending) return;
+    drawPending = true;
+    requestAnimationFrame(()=>{
+      drawPending = false;
+      draw();
+    });
+  }
+
   function hitAt(x,y){
     for (let i=0;i<8;i++){
       const s = TopGeom.fSlots[i];
@@ -495,7 +515,7 @@
         return {type:'foundation', idx:i};
     }
     for (let i=0;i<devilsSix.length;i++){
-      const dx = TopGeom.dsX + i*(CARD_W + TopGeom.dsGap), dy=TopGeom.dsY;
+      const dx = TopGeom.dsX + i*TopGeom.dsStep, dy=TopGeom.dsY;
       if (x>dx && x<dx+CARD_W && y>dy && y<dy+CARD_H)
         return {type:'devils', idx:i};
     }
@@ -733,7 +753,7 @@
   function handlePrimaryMove(x, y){
     mouseX = x;
     mouseY = y;
-    if (drag) draw();
+    if (drag) queueDraw();
   }
 
   function handlePrimaryDown(x, y){
@@ -827,14 +847,14 @@
         from: {type:'tableau', col:hit.col, idx:hit.row},
         cards: tableau[hit.col].slice(hit.row, hit.row + runLen)
       };
-      draw();
+      queueDraw();
       return true;
     }
 
     if (hit.type === 'devils'){
       const card = devilsSix[hit.idx];
       drag = {from:{type:'devils', idx:hit.idx}, cards:[card]};
-      draw();
+      queueDraw();
       return true;
     }
 
@@ -1106,7 +1126,7 @@
       const card = devilsSix[i];
       for (let f=0;f<8;f++){
         if (canPlaceOnFoundation(card,f)){
-          flash(()=>{ drawCard(card, TopGeom.dsX + i*(CARD_W + TopGeom.dsGap), TopGeom.dsY, {highlight:true}); });
+          flash(()=>{ drawCard(card, TopGeom.dsX + i*TopGeom.dsStep, TopGeom.dsY, {highlight:true}); });
           return;
         }
       }
