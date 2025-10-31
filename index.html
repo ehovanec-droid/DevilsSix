@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Churchill Solitaire — Devil's Six</title>
   <style>
     html,
@@ -17,6 +17,7 @@
         radial-gradient(circle at bottom, rgba(22, 12, 6, 0.92) 0%, rgba(14, 7, 3, 0.98) 62%);
       background-attachment: fixed;
       overflow-y: auto;
+      overflow-x: auto;
       user-select: none;
       display: flex;
       justify-content: center;
@@ -30,22 +31,22 @@
       box-sizing: border-box;
     }
     #hud {
-      position: absolute;
-      top: 0;
-      left: 0;
+      position: relative;
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: center;
-      padding: 6px 14px;
-      background: linear-gradient(180deg, rgba(35, 22, 13, 0.82) 0%, rgba(22, 12, 6, 0.88) 100%);
-      border: 1px solid rgba(255, 222, 166, 0.28);
-      border-radius: 14px;
-      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.38);
-      margin: 0;
+      gap: 18px;
+      padding: 12px 24px;
+      background: linear-gradient(180deg, rgba(35, 22, 13, 0.88) 0%, rgba(22, 12, 6, 0.92) 100%);
+      border: 1px solid rgba(255, 222, 166, 0.32);
+      border-radius: 18px;
+      box-shadow: 0 18px 38px rgba(0, 0, 0, 0.4);
+      margin: 0 auto 18px;
       backdrop-filter: blur(2px);
-      max-width: 320px;
-      pointer-events: none;
-      z-index: 2;
+      max-width: min(520px, 100%);
+      pointer-events: auto;
+      z-index: 1;
+      flex-wrap: wrap;
     }
     #identity {
       display: flex;
@@ -56,6 +57,7 @@
       letter-spacing: 0.12em;
       text-transform: uppercase;
       color: #f7e7c4;
+      min-width: 140px;
     }
     #identity .title {
       font-size: 16px;
@@ -66,20 +68,11 @@
       color: rgba(247, 231, 196, 0.72);
       letter-spacing: 0.26em;
     }
-    #ui {
-      position: absolute;
-      top: 0;
-      left: 0;
-      transform: none;
+    #hudButtons {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
       justify-content: center;
-      background: rgba(23, 14, 7, 0.82);
-      border-radius: 999px;
-      padding: 8px 18px;
-      box-shadow: 0 18px 32px rgba(0, 0, 0, 0.4);
-      pointer-events: none;
     }
     .btn {
       background: linear-gradient(180deg, rgba(71, 48, 24, 0.95) 0%, rgba(38, 23, 12, 0.95) 90%);
@@ -117,8 +110,12 @@
       position: relative;
       background: radial-gradient(circle at center, rgba(19, 10, 4, 0.86), rgba(13, 7, 3, 0.94));
       border-radius: 24px;
-      padding: 16px 22px 30px;
+      padding: 24px 22px 30px;
       box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.55), 0 24px 50px rgba(0, 0, 0, 0.55);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
     }
     canvas {
       display: block;
@@ -156,20 +153,20 @@
         position: static;
         margin: 6px auto 0;
         flex-direction: column;
-        gap: 6px;
+        gap: 10px;
         align-items: center;
+        max-width: none;
       }
       #identity {
         align-items: center;
+        text-align: center;
+      }
+      #hudButtons {
+        width: 100%;
+        justify-content: center;
       }
       #boardArea {
         padding: 14px 16px 28px;
-      }
-      #ui {
-        position: static;
-        transform: none;
-        margin: 12px auto 0;
-        pointer-events: none;
       }
     }
   </style>
@@ -182,12 +179,11 @@
           <div class="title">Devil's Six</div>
           <div class="subtitle" id="version"></div>
         </div>
+        <div id="hudButtons">
+          <button id="newGame" class="btn">New Deal</button>
+          <button id="undo" class="btn">Undo</button>
+        </div>
       </header>
-      <div id="ui">
-        <button id="newGame" class="btn">New Deal</button>
-        <button id="hint" class="btn">Hint</button>
-        <button id="undo" class="btn">Undo</button>
-      </div>
       <canvas id="game"></canvas>
       <div id="message">
         <div id="messageContent">
@@ -200,13 +196,12 @@
 
   <script>
   const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  const VERSION = '2.7';
+  const VERSION = '2.8';
   document.getElementById('version').textContent = `Version ${VERSION}`;
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
-  const controls = document.getElementById('ui');
-  const identityHud = document.getElementById('hud');
+  const hud = document.getElementById('hud');
   const SUITS = ['\u2660','\u2665','\u2666','\u2663'];
   const COLORS = { '\u2660':'black', '\u2663':'black', '\u2665':'red', '\u2666':'red' };
   const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
@@ -237,6 +232,7 @@
   let anchoredCols = new Array(10).fill(false);
 
   let CARD_W = 80, CARD_H = 120, OVERLAP = 22;
+  let tableauGap = 10;
   let boardWidth = 0;
   let boardHeight = 0;
 
@@ -255,14 +251,37 @@
   };
 
   function layout(w){
-    const proposed = Math.floor((w - PADDING * 2) / 12.6) + 4;
-    CARD_W = Math.max(72, Math.min(116, proposed));
+    const inner = Math.max(320, w - PADDING * 2);
+    const maxCard = Math.min(126, Math.floor(inner / 10));
+    let desired = Math.floor(inner / 10.6);
+    desired = Math.min(desired + 4, maxCard);
+    let card = Math.max(60, desired);
+    let gap = Math.max(8, Math.floor(card * 0.14));
+    let total = card * 10 + gap * 9;
+    if (total > inner){
+      const scale = inner / total;
+      card = Math.max(56, Math.floor(card * scale));
+      gap = Math.max(5, Math.floor(gap * scale));
+      total = card * 10 + gap * 9;
+    }
+    while (total > inner && card > 56){
+      card--;
+      gap = Math.max(5, Math.floor(card * 0.14));
+      total = card * 10 + gap * 9;
+    }
+    const grown = card + 2;
+    const grownGap = Math.max(5, Math.floor(grown * 0.14));
+    if (grown * 10 + grownGap * 9 <= inner){
+      card = grown;
+      gap = grownGap;
+    }
+    tableauGap = Math.max(5, Math.min(24, gap));
+    CARD_W = Math.max(56, Math.min(126, card));
     CARD_H = Math.max(94, Math.floor(CARD_W * 1.45) - 2);
-    OVERLAP = Math.max(22, Math.floor(CARD_H * 0.23));
+    OVERLAP = Math.max(20, Math.floor(CARD_H * 0.23));
   }
   function tableauGutter(){
-    const available = boardWidth - PADDING * 2 - CARD_W * 10;
-    return Math.max(6, Math.floor(available / 9));
+    return tableauGap;
   }
   function colX(c){ return PADDING + c * (CARD_W + tableauGutter()); }
   function tableauCardPos(col, row){
@@ -338,53 +357,52 @@
     canvas.height = Math.floor(boardHeight * DPR);
     ctx.setTransform(DPR,0,0,DPR,0,0);
   }
-  function positionIdentity(){
-    if (!identityHud) return;
-    const computed = window.getComputedStyle(identityHud);
-    if (computed.position !== 'absolute') return;
+  function positionHud(){
+    if (!hud) return;
+    const computed = window.getComputedStyle(hud);
+    if (computed.position !== 'absolute'){
+      hud.style.transform = 'none';
+      hud.style.left = '';
+      hud.style.top = '';
+      return;
+    }
+    const hudWidth = hud.offsetWidth || 0;
+    const hudHeight = hud.offsetHeight || 0;
     const dsSlots = Math.max(devilsSix.length, 6);
     const dsRight = TopGeom.dsX + CARD_W + TopGeom.dsStep * (dsSlots - 1);
     const stockRight = TopGeom.stockX + CARD_W;
-    const horizontalPad = Math.max(12, Math.floor(CARD_W * 0.2));
-    const desiredLeft = Math.max(stockRight + horizontalPad, dsRight + horizontalPad);
-    const hudWidth = identityHud.offsetWidth || 0;
-    const safeRight = TopGeom.fSlots.length
-      ? TopGeom.fSlots[0].x - horizontalPad
-      : boardWidth - PADDING;
-    const rightLimit = Math.max(PADDING, safeRight - hudWidth);
-    const clampedLeft = Math.min(Math.max(desiredLeft, PADDING), rightLimit);
-    identityHud.style.left = `${clampedLeft}px`;
-    identityHud.style.top = `${TopGeom.dsY + Math.max(6, Math.floor(CARD_H * 0.09))}px`;
-    identityHud.style.transform = 'none';
-  }
-  function positionControls(){
-    if (!controls) return;
-    const layoutMode = window.getComputedStyle(controls).position;
-    if (layoutMode !== 'absolute'){
-      controls.style.transform = 'none';
-      positionIdentity();
-      return;
-    }
-    const dsSlots = Math.max(devilsSix.length, 6);
-    const dsRight = TopGeom.dsX + CARD_W + TopGeom.dsStep * (dsSlots - 1);
-    let fLeft = boardWidth - PADDING - CARD_W;
+    let foundationLeft = boardWidth - PADDING - CARD_W;
     if (TopGeom.fSlots.length){
-      fLeft = TopGeom.fSlots[0].x;
+      foundationLeft = TopGeom.fSlots[0].x;
     }
-    const gap = Math.max(0, fLeft - dsRight);
-    const centerX = dsRight + gap / 2;
-    const shift = Math.min(Math.max(10, Math.floor(CARD_W * 0.12)), gap / 1.4 || 0);
-    const minX = TopGeom.dsX + CARD_W + 24;
-    const maxX = Math.max(minX, boardWidth - PADDING - 24);
-    const targetX = centerX + shift;
-    const clampedX = Math.max(minX, Math.min(targetX, maxX));
-    const verticalMid = TopGeom.fY + CARD_H * 0.48;
-    const afterDevils = TopGeom.dsY + CARD_H + Math.max(6, Math.floor(CARD_H * 0.08));
-    const controlsY = Math.max(afterDevils, verticalMid);
-    controls.style.left = `${clampedX}px`;
-    controls.style.top = `${controlsY}px`;
-    controls.style.transform = 'translateX(0)';
-    positionIdentity();
+    const margin = Math.max(12, Math.floor(CARD_W * 0.22));
+    const gap = foundationLeft - dsRight;
+    let targetX;
+    if (gap >= hudWidth + margin * 2){
+      targetX = dsRight + (gap - hudWidth) / 2;
+    } else {
+      targetX = Math.max(stockRight + margin, dsRight + margin) - hudWidth / 2;
+    }
+    const fallbackRight = Math.max(PADDING, boardWidth - PADDING - hudWidth);
+    let rightLimit = fallbackRight;
+    if (TopGeom.fSlots.length){
+      rightLimit = Math.min(rightLimit, foundationLeft - margin - hudWidth);
+    }
+    if (rightLimit < PADDING) rightLimit = fallbackRight;
+    const clampedLeft = Math.max(PADDING, Math.min(targetX, rightLimit));
+    hud.style.left = `${clampedLeft}px`;
+
+    const minTop = TopGeom.dsY + Math.max(4, Math.floor(CARD_H * 0.06));
+    const maxTop = TopGeom.fY + CARD_H - hudHeight - Math.max(4, Math.floor(CARD_H * 0.08));
+    const mid = TopGeom.dsY + CARD_H / 2 - hudHeight / 2;
+    let top = mid;
+    if (maxTop < minTop){
+      top = minTop;
+    } else {
+      top = Math.max(minTop, Math.min(mid, maxTop));
+    }
+    hud.style.top = `${Math.max(TopGeom.dsY, top)}px`;
+    hud.style.transform = 'none';
   }
   function render(){
     syncBoardMetrics();
@@ -582,7 +600,7 @@
         drawCard(drag.cards[i], baseX, baseY + i*OVERLAP, {ghost:true,highlight:true});
       }
     }
-    positionControls();
+    positionHud();
   }
 
   let drawPending = false;
@@ -603,10 +621,10 @@
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
   function hitAt(x,y,loose=false){
-    const fMarginX = loose ? Math.max(14, Math.floor(CARD_W * 0.5)) : 0;
-    const fMarginY = loose ? Math.max(14, Math.floor(CARD_H * 0.5)) : 0;
-    const tMarginX = loose ? Math.max(18, Math.floor(CARD_W * 0.55)) : 0;
-    const tMarginY = loose ? Math.max(20, Math.floor(CARD_H * 0.55)) : 0;
+    const fMarginX = loose ? Math.max(20, Math.floor(CARD_W * 0.7)) : Math.max(0, Math.floor(CARD_W * 0.08));
+    const fMarginY = loose ? Math.max(18, Math.floor(CARD_H * 0.6)) : Math.max(0, Math.floor(CARD_H * 0.08));
+    const tMarginX = loose ? Math.max(24, Math.floor(CARD_W * 0.75)) : Math.max(0, Math.floor(CARD_W * 0.08));
+    const tMarginY = loose ? Math.max(26, Math.floor(CARD_H * 0.62)) : Math.max(0, Math.floor(CARD_H * 0.08));
 
     for (let i=0;i<8;i++){
       const s = TopGeom.fSlots[i];
@@ -661,6 +679,65 @@
     const stack = foundations[fIdx];
     const top   = stack[stack.length-1];
     return top ? (card.value === top.value + 1) : (card.value === 1);
+  }
+  function findFoundationTarget(card){
+    const matches = [];
+    for (let f=0; f<8; f++) if (SUITS[f % 4] === card.suit) matches.push(f);
+    if (!matches.length) return null;
+    if (card.value === 1){
+      for (const f of matches){
+        if (foundations[f].length === 0) return f;
+      }
+    }
+    for (const f of matches){
+      if (canPlaceOnFoundation(card, f)) return f;
+    }
+    return null;
+  }
+  function commitCardToFoundation(card, from){
+    const target = findFoundationTarget(card);
+    if (target === null) return false;
+    const snapshot = JSON.parse(JSON.stringify(from));
+    if (from.type === 'tableau'){
+      const colArr = tableau[from.col];
+      if (!colArr.length) return false;
+      const topIdx = colArr.length - 1;
+      if (topIdx !== from.idx || colArr[topIdx] !== card) return false;
+      foundations[target].push(card);
+      colArr.pop();
+      flipTop(from.col);
+    } else if (from.type === 'devils'){
+      if (devilsSix[from.idx] !== card) return false;
+      foundations[target].push(card);
+      devilsSix.splice(from.idx, 1);
+    } else {
+      return false;
+    }
+    undoStack.push({kind:'toFound', from:snapshot, fIdx:target, card});
+    render();
+    updateUI();
+    checkWinOrStuck();
+    return true;
+  }
+  function attemptAutoFoundationAt(x, y){
+    if (isAnimatingDeal) return false;
+    const hit = hitAt(x, y, true);
+    if (!hit) return false;
+    if (hit.type === 'tableau'){
+      const colArr = tableau[hit.col];
+      if (!colArr.length) return false;
+      const topIdx = colArr.length - 1;
+      if (hit.row !== topIdx) return false;
+      const card = colArr[topIdx];
+      if (!card || !card.faceUp) return false;
+      return commitCardToFoundation(card, {type:'tableau', col:hit.col, idx:topIdx});
+    }
+    if (hit.type === 'devils'){
+      const card = devilsSix[hit.idx];
+      if (!card) return false;
+      return commitCardToFoundation(card, {type:'devils', idx:hit.idx});
+    }
+    return false;
   }
   function flipTop(col){
     const colArr = tableau[col];
@@ -888,7 +965,6 @@
 
   function updateUI(disable=false){
     document.getElementById('undo').disabled = disable || undoStack.length===0;
-    document.getElementById('hint').disabled = disable;
   }
   function showMessage(t){
     document.getElementById('messageText').textContent = t;
@@ -942,7 +1018,7 @@
       drag.renderX = x - drag.offsetX;
       drag.renderY = y - drag.offsetY;
       drag.snap = computeDragSnap(x, y);
-      queueDraw(true);
+      queueDraw();
     }
   }
 
@@ -956,78 +1032,6 @@
     if (hit.type === 'stock'){
       doDeal();
       return true;
-    }
-
-    if (hit.type === 'tableau' && hit.row >= 0){
-      const card = tableau[hit.col][hit.row];
-      if (card && card.faceUp && card.value === 1){
-        const candidates = [];
-        for (let f=0;f<8;f++) if (SUITS[f%4] === card.suit) candidates.push(f);
-        let placed = false;
-        for (const f of candidates){
-          if (foundations[f].length === 0){
-            foundations[f].push(card);
-            tableau[hit.col].splice(hit.row,1);
-            flipTop(hit.col);
-            undoStack.push({kind:'toFound', from:{type:'tableau',col:hit.col,idx:hit.row}, fIdx:f, card});
-            placed = true;
-            break;
-          }
-        }
-        if (!placed){
-          for (const f of candidates){
-            if (canPlaceOnFoundation(card, f)){
-              foundations[f].push(card);
-              tableau[hit.col].splice(hit.row,1);
-              flipTop(hit.col);
-              undoStack.push({kind:'toFound', from:{type:'tableau',col:hit.col,idx:hit.row}, fIdx:f, card});
-              placed = true;
-              break;
-            }
-          }
-        }
-        if (placed){
-          render();
-          updateUI();
-          checkWinOrStuck();
-          return true;
-        }
-      }
-    }
-
-    if (hit.type === 'devils'){
-      const card = devilsSix[hit.idx];
-      if (card && card.value === 1){
-        const candidates = [];
-        for (let f=0;f<8;f++) if (SUITS[f%4] === card.suit) candidates.push(f);
-        let placed = false;
-        for (const f of candidates){
-          if (foundations[f].length === 0){
-            foundations[f].push(card);
-            devilsSix.splice(hit.idx,1);
-            undoStack.push({kind:'toFound', from:{type:'devils',idx:hit.idx}, fIdx:f, card});
-            placed = true;
-            break;
-          }
-        }
-        if (!placed){
-          for (const f of candidates){
-            if (canPlaceOnFoundation(card, f)){
-              foundations[f].push(card);
-              devilsSix.splice(hit.idx,1);
-              undoStack.push({kind:'toFound', from:{type:'devils',idx:hit.idx}, fIdx:f, card});
-              placed = true;
-              break;
-            }
-          }
-        }
-        if (placed){
-          render();
-          updateUI();
-          checkWinOrStuck();
-          return true;
-        }
-      }
     }
 
     if (hit.type === 'tableau'){
@@ -1077,7 +1081,7 @@
     if (!drag){
       mouseX = x;
       mouseY = y;
-      return;
+      return false;
     }
     mouseX = x;
     mouseY = y;
@@ -1136,6 +1140,7 @@
       updateUI();
       checkWinOrStuck();
     }
+    return moved;
   }
 
   function cancelDrag(){
@@ -1146,13 +1151,38 @@
   }
 
   canvas.addEventListener('contextmenu', e=> e.preventDefault());
+  canvas.addEventListener('dblclick', e=>{
+    const pos = getCanvasPos(e.clientX, e.clientY);
+    if (attemptAutoFoundationAt(pos.x, pos.y)) e.preventDefault();
+  });
 
   const supportsPointer = 'PointerEvent' in window;
   if (supportsPointer){
     let activePointerId = null;
+    let tapCandidate = null;
+    let lastTapTime = 0;
+    let lastTapPos = null;
+    const TAP_INTERVAL = 320;
+    const TAP_SLOP_SQ = 26 * 26;
     const isPrimaryPointer = e => {
       if (e.pointerType === 'mouse') return e.button === 0;
       return true;
+    };
+    const registerTap = pos => {
+      const now = performance.now();
+      if (lastTapPos && now - lastTapTime <= TAP_INTERVAL){
+        const dx = pos.x - lastTapPos.x;
+        const dy = pos.y - lastTapPos.y;
+        if (dx*dx + dy*dy <= TAP_SLOP_SQ){
+          if (attemptAutoFoundationAt(pos.x, pos.y)){
+            lastTapTime = 0;
+            lastTapPos = null;
+            return;
+          }
+        }
+      }
+      lastTapTime = now;
+      lastTapPos = {x: pos.x, y: pos.y};
     };
     canvas.addEventListener('pointerdown', e=>{
       if (activePointerId !== null) return;
@@ -1165,19 +1195,53 @@
         activePointerId = e.pointerId;
       }
       if (handled && e.pointerType !== 'mouse') e.preventDefault();
+      if (e.pointerType !== 'mouse'){
+        tapCandidate = handled
+          ? {
+              pointerId: e.pointerId,
+              pointerType: e.pointerType,
+              startPos: {x: pos.x, y: pos.y},
+              lastPos: {x: pos.x, y: pos.y},
+              moved: false
+            }
+          : null;
+      }
     }, {passive:false});
     canvas.addEventListener('pointermove', e=>{
-      if (activePointerId !== e.pointerId) return;
-      const pos = getCanvasPos(e.clientX, e.clientY);
-      handlePrimaryMove(pos.x, pos.y);
-      if (drag && e.pointerType !== 'mouse') e.preventDefault();
+      if (activePointerId === e.pointerId){
+        const pos = getCanvasPos(e.clientX, e.clientY);
+        handlePrimaryMove(pos.x, pos.y);
+        if (tapCandidate && tapCandidate.pointerId === e.pointerId){
+          const dx = pos.x - tapCandidate.startPos.x;
+          const dy = pos.y - tapCandidate.startPos.y;
+          if (dx*dx + dy*dy > TAP_SLOP_SQ) tapCandidate.moved = true;
+          tapCandidate.lastPos = {x: pos.x, y: pos.y};
+        }
+        if (drag && e.pointerType !== 'mouse') e.preventDefault();
+        return;
+      }
+      if (tapCandidate && tapCandidate.pointerId === e.pointerId){
+        const pos = getCanvasPos(e.clientX, e.clientY);
+        const dx = pos.x - tapCandidate.startPos.x;
+        const dy = pos.y - tapCandidate.startPos.y;
+        if (dx*dx + dy*dy > TAP_SLOP_SQ) tapCandidate.moved = true;
+        tapCandidate.lastPos = {x: pos.x, y: pos.y};
+      }
     }, {passive:false});
     const finishPointer = e=>{
-      if (activePointerId !== e.pointerId) return;
       const pos = getCanvasPos(e.clientX, e.clientY);
-      handlePrimaryUp(pos.x, pos.y);
-      activePointerId = null;
-      try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+      const movedByDrag = handlePrimaryUp(pos.x, pos.y);
+      if (activePointerId === e.pointerId){
+        activePointerId = null;
+        try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+      }
+      if (tapCandidate && tapCandidate.pointerId === e.pointerId){
+        const candidate = tapCandidate;
+        tapCandidate = null;
+        if (candidate.pointerType !== 'mouse' && !candidate.moved && !movedByDrag){
+          registerTap(candidate.lastPos);
+        }
+      }
       if (e.pointerType !== 'mouse') e.preventDefault();
     };
     canvas.addEventListener('pointerup', finishPointer, {passive:false});
@@ -1187,6 +1251,7 @@
       activePointerId = null;
       try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
       cancelDrag();
+      tapCandidate = null;
       if (e.pointerType !== 'mouse') e.preventDefault();
     };
     canvas.addEventListener('pointercancel', cancelPointer, {passive:false});
@@ -1194,6 +1259,7 @@
     canvas.addEventListener('lostpointercapture', e=>{
       if (activePointerId !== e.pointerId) return;
       activePointerId = null;
+      tapCandidate = null;
       cancelDrag();
     });
   } else {
@@ -1213,6 +1279,11 @@
     });
 
     let activeTouchId = null;
+    let tapTouchCandidate = null;
+    let lastTouchTime = 0;
+    let lastTouchPos = null;
+    const TOUCH_INTERVAL = 320;
+    const TOUCH_SLOP_SQ = 26 * 26;
     canvas.addEventListener('touchstart', e=>{
       if (activeTouchId !== null) return;
       const touch = e.changedTouches[0];
@@ -1224,42 +1295,79 @@
       if (startedDrag) {
         activeTouchId = touch.identifier;
       }
+      tapTouchCandidate = {
+        identifier: touch.identifier,
+        startPos: {x: pos.x, y: pos.y},
+        lastPos: {x: pos.x, y: pos.y},
+        moved: false
+      };
       e.preventDefault();
     }, {passive:false});
     window.addEventListener('touchmove', e=>{
-      if (activeTouchId === null) return;
+      let prevent = false;
       for (let i=0;i<e.changedTouches.length;i++){
         const touch = e.changedTouches[i];
-        if (touch.identifier === activeTouchId){
-          const pos = getCanvasPos(touch.clientX, touch.clientY);
+        const pos = getCanvasPos(touch.clientX, touch.clientY);
+        if (activeTouchId !== null && touch.identifier === activeTouchId){
           handlePrimaryMove(pos.x, pos.y);
-          if (drag) e.preventDefault();
-          break;
+          if (drag) prevent = true;
+        }
+        if (tapTouchCandidate && tapTouchCandidate.identifier === touch.identifier){
+          const dx = pos.x - tapTouchCandidate.startPos.x;
+          const dy = pos.y - tapTouchCandidate.startPos.y;
+          if (dx*dx + dy*dy > TOUCH_SLOP_SQ) tapTouchCandidate.moved = true;
+          tapTouchCandidate.lastPos = {x: pos.x, y: pos.y};
         }
       }
+      if (prevent) e.preventDefault();
     }, {passive:false});
     const finishTouch = e=>{
-      if (activeTouchId === null) return;
+      let handled = false;
       for (let i=0;i<e.changedTouches.length;i++){
         const touch = e.changedTouches[i];
-        if (touch.identifier === activeTouchId){
-          const pos = getCanvasPos(touch.clientX, touch.clientY);
-          handlePrimaryUp(pos.x, pos.y);
+        const matchesDrag = activeTouchId !== null && touch.identifier === activeTouchId;
+        const matchesTap = tapTouchCandidate && tapTouchCandidate.identifier === touch.identifier;
+        if (!matchesDrag && !matchesTap) continue;
+        const pos = getCanvasPos(touch.clientX, touch.clientY);
+        const movedByDrag = handlePrimaryUp(pos.x, pos.y);
+        if (matchesDrag) {
           activeTouchId = null;
-          e.preventDefault();
-          break;
         }
+        if (matchesTap){
+          const candidate = tapTouchCandidate;
+          tapTouchCandidate = null;
+          if (!candidate.moved && !movedByDrag){
+            const now = performance.now();
+            if (lastTouchPos && now - lastTouchTime <= TOUCH_INTERVAL){
+              const dx = candidate.lastPos.x - lastTouchPos.x;
+              const dy = candidate.lastPos.y - lastTouchPos.y;
+              if (dx*dx + dy*dy <= TOUCH_SLOP_SQ){
+                if (attemptAutoFoundationAt(candidate.lastPos.x, candidate.lastPos.y)){
+                  lastTouchTime = 0;
+                  lastTouchPos = null;
+                  handled = true;
+                  continue;
+                }
+              }
+            }
+            lastTouchTime = now;
+            lastTouchPos = {x: candidate.lastPos.x, y: candidate.lastPos.y};
+          }
+        }
+        handled = true;
       }
+      if (handled) e.preventDefault();
     };
     window.addEventListener('touchend', finishTouch, {passive:false});
     window.addEventListener('touchcancel', e=>{
-      if (activeTouchId === null) return;
       for (let i=0;i<e.changedTouches.length;i++){
         const touch = e.changedTouches[i];
-        if (touch.identifier === activeTouchId){
+        if (activeTouchId !== null && touch.identifier === activeTouchId){
           activeTouchId = null;
           cancelDrag();
-          break;
+        }
+        if (tapTouchCandidate && tapTouchCandidate.identifier === touch.identifier){
+          tapTouchCandidate = null;
         }
       }
     });
@@ -1304,59 +1412,11 @@
     updateUI();
   });
 
-  function hint(){
-    if (isAnimatingDeal) return;
-    const tY = tableauTopY();
-    for (let c=0;c<10;c++){
-      const col = tableau[c];
-      const top = col[col.length-1];
-      if (!top) continue;
-      for (let f=0;f<8;f++){
-        if (canPlaceOnFoundation(top,f)){
-          flash(()=>{ drawCard(top, colX(c), tY + (col.length-1)*OVERLAP, {highlight:true}); });
-          return;
-        }
-      }
-    }
-    for (let i=0;i<devilsSix.length;i++){
-      const card = devilsSix[i];
-      for (let f=0;f<8;f++){
-        if (canPlaceOnFoundation(card,f)){
-          flash(()=>{ drawCard(card, TopGeom.dsX + i*TopGeom.dsStep, TopGeom.dsY, {highlight:true}); });
-          return;
-        }
-      }
-    }
-    for (let from=0;from<10;from++){
-      const col = tableau[from];
-      for (let i=0;i<col.length;i++){
-        const card = col[i];
-        if (!card.faceUp) continue;
-        for (let to=0;to<10;to++){
-          if (to===from) continue;
-          if (canPlaceOnTableau(card,to)){
-            flash(()=>{ drawCard(card, colX(from), tY + i*OVERLAP, {highlight:true}); });
-            return;
-          }
-        }
-      }
-    }
-  }
-  function flash(paint){
-    let n=0;
-    const id=setInterval(()=>{
-      render();
-      if (n%2===0) paint();
-      if (++n>5) clearInterval(id);
-    },120);
-  }
-
   document.getElementById('newGame').addEventListener('click', ()=>{
     if (isAnimatingDeal) return;
     hideMessage();
     newGame();
   });
-  document.getElementById('hint').addEventListener('click', hint);
   document.getElementById('playAgain').addEventListener('click', ()=>{ hideMessage(); newGame(); });
 
   function runTests(){
