@@ -976,9 +976,11 @@
       suitOrder[card.suit].push(card.value);
     }
     for (const ordered of Object.values(suitOrder)){
+      if (ordered.length < 2) continue;
+      const sorted = ordered.slice().sort((a,b)=>a-b);
       let streak = 1;
-      for (let i=0;i<ordered.length-1;i++){
-        if (ordered[i] === ordered[i+1] + 1){
+      for (let i=0;i<sorted.length-1;i++){
+        if (sorted[i+1] === sorted[i] + 1){
           streak++;
           if (streak >= 2) return true;
         } else {
