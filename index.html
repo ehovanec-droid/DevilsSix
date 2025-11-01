@@ -242,6 +242,27 @@
   for (let i=2;i<=10;i++) RVAL[i]=i;
   const PADDING = 16;
 
+  const computedCanvasStyle = window.getComputedStyle ? window.getComputedStyle(canvas) : null;
+  const defaultTouchAction = (canvas.style.touchAction && canvas.style.touchAction.trim())
+    || (computedCanvasStyle ? computedCanvasStyle.touchAction : '')
+    || 'pan-y pinch-zoom';
+  let touchActionLocked = false;
+  let touchActionLockId = null;
+  function setTouchActionLock(locked){
+    if (locked === touchActionLocked) return;
+    touchActionLocked = locked;
+    canvas.style.touchAction = locked ? 'none' : defaultTouchAction;
+  }
+  function lockTouchAction(id){
+    touchActionLockId = id;
+    setTouchActionLock(true);
+  }
+  function unlockTouchAction(id){
+    if (touchActionLockId !== id) return;
+    touchActionLockId = null;
+    setTouchActionLock(false);
+  }
+
   class Card {
     constructor(suit, rank){
       this.suit = suit;
@@ -972,51 +993,82 @@
     return cards;
   }
 
-  function isDevilsSixUnwinnable(cards){
-    const suitOrder = {};
-    for (let i=cards.length-1;i>=0;i--){
-      const card = cards[i];
-      if (!suitOrder[card.suit]) suitOrder[card.suit] = [];
-      suitOrder[card.suit].push(card.value);
+  function describeDevilsSixIssue(cards){
+    const bySuit = new Map();
+    for (let idx=0; idx<cards.length; idx++){
+      const card = cards[idx];
+      if (!card) continue;
+      if (!bySuit.has(card.suit)) bySuit.set(card.suit, []);
+      bySuit.get(card.suit).push({ idx, value: card.value });
     }
-    for (const ordered of Object.values(suitOrder)){
-      if (ordered.length < 2) continue;
-      const sorted = ordered.slice().sort((a,b)=>a-b);
-      let streak = 1;
-      for (let i=0;i<sorted.length-1;i++){
-        if (sorted[i+1] === sorted[i] + 1){
-          streak++;
-          if (streak >= 2) return true;
-        } else {
-          streak = 1;
+
+    for (const [suit, entries] of bySuit.entries()){
+      if (entries.length >= 3){
+        // Three or more cards from the same suit in the reserve all but guarantee
+        // that the sequence for that suit cannot be completed, so regenerate.
+        return { suit, indices: entries.map(e=>e.idx), reason: 'cluster' };
+      }
+      if (entries.length >= 2){
+        const sorted = entries.slice().sort((a,b)=>a.value - b.value);
+        let streak = 1;
+        for (let i=1;i<sorted.length;i++){
+          if (sorted[i].value === sorted[i-1].value + 1){
+            streak++;
+            if (streak >= 2){
+              return { suit, indices: [sorted[i-1].idx, sorted[i].idx], reason: 'sequence' };
+            }
+          } else {
+            streak = 1;
+          }
         }
       }
     }
-    return false;
+    return null;
+  }
+
+  function isDevilsSixUnwinnable(cards){
+    return !!describeDevilsSixIssue(cards);
   }
 
   function repairDevilsSix(cards){
-    for (let i=0;i<cards.length;i++){
-      const original = cards[i];
-      const originalFace = original.faceUp;
-      for (let j=0;j<deck.length;j++){
-        const replacement = deck[j];
-        const replacementFace = replacement.faceUp;
-        cards[i] = replacement;
-        replacement.faceUp = true;
-        original.faceUp = false;
-        if (!isDevilsSixUnwinnable(cards)){
-          deck[j] = original;
-          return cards;
+    let attempts = 0;
+    while (attempts < cards.length * 2){
+      const issue = describeDevilsSixIssue(cards);
+      if (!issue) return cards;
+
+      let resolved = false;
+      const targets = issue.indices.slice().sort((a,b)=>b-a);
+      for (const idx of targets){
+        const original = cards[idx];
+        const originalFace = original.faceUp;
+        for (let j=0;j<deck.length;j++){
+          const replacement = deck[j];
+          const replacementFace = replacement.faceUp;
+          cards[idx] = replacement;
+          replacement.faceUp = true;
+          original.faceUp = false;
+          if (!isDevilsSixUnwinnable(cards)){
+            deck[j] = original;
+            resolved = true;
+            break;
+          }
+          cards[idx] = original;
+          original.faceUp = originalFace;
+          replacement.faceUp = replacementFace;
         }
-        cards[i] = original;
-        original.faceUp = originalFace;
-        replacement.faceUp = replacementFace;
+        if (!resolved){
+          cards[idx] = original;
+          original.faceUp = originalFace;
+        }
+        if (resolved) break;
       }
-      cards[i] = original;
-      original.faceUp = originalFace;
+
+      if (!resolved) break;
+      attempts++;
     }
-    return null;
+
+    cards.forEach(card => { if (card) card.faceUp = true; });
+    return isDevilsSixUnwinnable(cards) ? null : cards;
   }
 
   function preparePlayableDevilsSix(){
@@ -1350,7 +1402,10 @@
         try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
         activePointerId = e.pointerId;
       }
-      if (handled && e.pointerType !== 'mouse') e.preventDefault();
+      if (handled && e.pointerType !== 'mouse'){
+        lockTouchAction(e.pointerId);
+        e.preventDefault();
+      }
     }, {passive:false});
     canvas.addEventListener('pointermove', e=>{
       if (activePointerId !== e.pointerId) return;
@@ -1359,21 +1414,33 @@
       if (drag && e.pointerType !== 'mouse') e.preventDefault();
     }, {passive:false});
     const finishPointer = e=>{
-      if (activePointerId !== e.pointerId) return;
-      const pos = getCanvasPos(e.clientX, e.clientY);
-      handlePrimaryUp(pos.x, pos.y);
-      activePointerId = null;
-      try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
-      if (e.pointerType !== 'mouse') e.preventDefault();
+      const wasActive = activePointerId === e.pointerId;
+      if (wasActive){
+        const pos = getCanvasPos(e.clientX, e.clientY);
+        handlePrimaryUp(pos.x, pos.y);
+        activePointerId = null;
+        try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+      }
+      if (e.pointerType !== 'mouse'){
+        const hadTouchLock = touchActionLockId === e.pointerId;
+        unlockTouchAction(e.pointerId);
+        if (wasActive || hadTouchLock) e.preventDefault();
+      }
     };
     canvas.addEventListener('pointerup', finishPointer, {passive:false});
     window.addEventListener('pointerup', finishPointer, {passive:false});
     const cancelPointer = e=>{
-      if (activePointerId !== e.pointerId) return;
-      activePointerId = null;
-      try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
-      cancelDrag();
-      if (e.pointerType !== 'mouse') e.preventDefault();
+      const wasActive = activePointerId === e.pointerId;
+      if (wasActive){
+        activePointerId = null;
+        try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+        cancelDrag();
+      }
+      if (e.pointerType !== 'mouse'){
+        const hadTouchLock = touchActionLockId === e.pointerId;
+        unlockTouchAction(e.pointerId);
+        if (wasActive || hadTouchLock) e.preventDefault();
+      }
     };
     canvas.addEventListener('pointercancel', cancelPointer, {passive:false});
     window.addEventListener('pointercancel', cancelPointer, {passive:false});
@@ -1381,6 +1448,7 @@
       if (activePointerId !== e.pointerId) return;
       activePointerId = null;
       cancelDrag();
+      if (touchActionLockId === e.pointerId) unlockTouchAction(e.pointerId);
     });
   } else {
     canvas.addEventListener('mousemove', e=>{
@@ -1410,6 +1478,7 @@
       if (startedDrag) {
         activeTouchId = touch.identifier;
       }
+      lockTouchAction(touch.identifier);
       e.preventDefault();
     }, {passive:false});
     window.addEventListener('touchmove', e=>{
@@ -1425,27 +1494,33 @@
       }
     }, {passive:false});
     const finishTouch = e=>{
-      if (activeTouchId === null) return;
+      let consumed = false;
       for (let i=0;i<e.changedTouches.length;i++){
         const touch = e.changedTouches[i];
-        if (touch.identifier === activeTouchId){
+        const id = touch.identifier;
+        if (activeTouchId !== null && id === activeTouchId){
           const pos = getCanvasPos(touch.clientX, touch.clientY);
           handlePrimaryUp(pos.x, pos.y);
           activeTouchId = null;
-          e.preventDefault();
-          break;
+          unlockTouchAction(id);
+          consumed = true;
+        } else if (touchActionLockId === id){
+          unlockTouchAction(id);
         }
       }
+      if (consumed) e.preventDefault();
     };
     window.addEventListener('touchend', finishTouch, {passive:false});
     window.addEventListener('touchcancel', e=>{
-      if (activeTouchId === null) return;
       for (let i=0;i<e.changedTouches.length;i++){
         const touch = e.changedTouches[i];
-        if (touch.identifier === activeTouchId){
+        const id = touch.identifier;
+        if (activeTouchId !== null && id === activeTouchId){
           activeTouchId = null;
           cancelDrag();
-          break;
+          unlockTouchAction(id);
+        } else if (touchActionLockId === id){
+          unlockTouchAction(id);
         }
       }
     });
