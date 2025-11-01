@@ -20,6 +20,7 @@
       user-select: none;
       display: flex;
       justify-content: center;
+      align-items: flex-start;
     }
     #app {
       width: min(1220px, 100%);
@@ -79,6 +80,7 @@
       text-transform: uppercase;
       text-align: center;
       white-space: nowrap;
+      width: var(--stock-counter-width, auto);
     }
     .btn {
       background: linear-gradient(180deg, rgba(71, 48, 24, 0.95) 0%, rgba(38, 23, 12, 0.95) 90%);
@@ -119,7 +121,23 @@
       padding: 2px 22px 30px;
       box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.55), 0 24px 50px rgba(0, 0, 0, 0.55);
       overflow-x: auto;
+      overflow-y: auto;
+      max-height: calc(100vh - 48px);
       -webkit-overflow-scrolling: touch;
+    }
+    #boardArea::-webkit-scrollbar {
+      width: 6px;
+    }
+    #boardArea::-webkit-scrollbar-thumb {
+      background: rgba(246, 227, 176, 0.18);
+      border-radius: 999px;
+    }
+    #boardArea::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    #boardArea {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(246, 227, 176, 0.18) transparent;
     }
     canvas {
       display: block;
@@ -161,6 +179,7 @@
       }
       #boardArea {
         padding: 6px 16px 28px;
+        max-height: calc(100vh - 32px);
       }
       #ui {
         position: static;
@@ -245,7 +264,9 @@
   // ★ NEW: track which tableau columns have had a king planted
   let anchoredCols = new Array(10).fill(false);
 
-  let CARD_W = 80, CARD_H = 120, OVERLAP = 22;
+  let CARD_W = 80, CARD_H = 120;
+  let FACE_UP_OVERLAP = 22;
+  let FACE_DOWN_OVERLAP = 14;
   let boardWidth = 0;
   let boardHeight = 0;
 
@@ -268,16 +289,29 @@
     const proposed = Math.floor(available / 12.6) + 4;
     const baseWidth = Math.max(52, Math.min(114, proposed));
     CARD_W = Math.max(44, Math.min(120, baseWidth + 4));
-    CARD_H = Math.max(92, Math.floor(CARD_W * 1.45) - 2);
-    OVERLAP = Math.max(20, Math.floor(CARD_H * 0.23));
+    CARD_H = Math.max(90, Math.floor(CARD_W * 1.45) - 4);
+    FACE_UP_OVERLAP = Math.max(18, Math.floor(CARD_H * 0.24));
+    FACE_DOWN_OVERLAP = Math.max(10, Math.floor(CARD_H * 0.12));
   }
   function tableauGutter(){
     const available = boardWidth - PADDING * 2 - CARD_W * 10;
     return Math.max(6, Math.floor(available / 9));
   }
   function colX(c){ return PADDING + c * (CARD_W + tableauGutter()); }
+  function tableauSpacingForCard(card){
+    return card && card.faceUp ? FACE_UP_OVERLAP : FACE_DOWN_OVERLAP;
+  }
+  function tableauRowTop(col, row){
+    const colArr = tableau[col] || [];
+    let y = tableauTopY();
+    const limit = Math.max(0, Math.min(row, colArr.length));
+    for (let i=0; i<limit; i++){
+      y += tableauSpacingForCard(colArr[i]);
+    }
+    return y;
+  }
   function tableauCardPos(col, row){
-    return { x: colX(col), y: tableauTopY() + row * OVERLAP };
+    return { x: colX(col), y: tableauRowTop(col, row) };
   }
   function devilsCardPos(idx){
     return { x: TopGeom.dsX + idx * TopGeom.dsStep, y: TopGeom.dsY };
@@ -295,8 +329,8 @@
     for (let i=0;i<tableau.length;i++) refreshAnchorForColumn(i);
   }
   function tableauTopY(){
-    const top = TopGeom.fY + (CARD_H * TopGeom.fRows) + (TopGeom.fGapY * (TopGeom.fRows - 1)) + Math.max(4, Math.floor(CARD_H * 0.05));
-    return Math.max(top, CARD_H + Math.max(16, Math.floor(CARD_H * 0.14)));
+    const top = TopGeom.fY + (CARD_H * TopGeom.fRows) + (TopGeom.fGapY * (TopGeom.fRows - 1)) + Math.max(2, Math.floor(CARD_H * 0.04));
+    return Math.max(top, CARD_H + Math.max(12, Math.floor(CARD_H * 0.12)));
   }
   function computeTopGeometry(){
     const topBand = Math.max(3, Math.floor(CARD_H * 0.032));
@@ -328,12 +362,15 @@
     }
   }
   function computeBoardHeight(){
-    const tTop = tableauTopY();
-    let tallest = 1;
+    const baseTop = tableauTopY();
+    let maxBottom = baseTop + CARD_H;
     for (let i=0;i<tableau.length;i++){
-      tallest = Math.max(tallest, tableau[i].length);
+      const col = tableau[i];
+      if (!col.length) continue;
+      const top = tableauRowTop(i, col.length - 1);
+      maxBottom = Math.max(maxBottom, top + CARD_H);
     }
-    return Math.max(window.innerHeight * 0.82, tTop + (tallest - 1) * OVERLAP + CARD_H + PADDING);
+    return Math.max(window.innerHeight * 0.82, maxBottom + PADDING);
   }
   function syncBoardMetrics(){
     const containerWidth = canvas.parentElement ? canvas.parentElement.clientWidth : 0;
@@ -399,10 +436,11 @@
 
   function positionStockCounter(){
     if (!stockCounter) return;
-    const counterWidth = stockCounter.offsetWidth || 0;
     const offsetBelow = Math.max(6, Math.floor(CARD_H * 0.08));
-    const baseLeft = TopGeom.stockX + CARD_W / 2 - counterWidth / 2;
-    stockCounter.style.left = `${Math.round(baseLeft)}px`;
+    const width = Math.round(CARD_W);
+    stockCounter.style.setProperty('--stock-counter-width', `${width}px`);
+    stockCounter.style.width = `${width}px`;
+    stockCounter.style.left = `${Math.round(TopGeom.stockX)}px`;
     stockCounter.style.top = `${Math.round(TopGeom.stockY + CARD_H + offsetBelow)}px`;
   }
 
@@ -572,7 +610,9 @@
     for (let i=0;i<dsSlots;i++){
       const isDraggingDevil = drag && drag.from.type === 'devils' && drag.from.idx === i;
       const card = (!isDraggingDevil && devilsSix[i]) ? devilsSix[i] : null;
-      drawCard(card, TopGeom.dsX + i*TopGeom.dsStep, TopGeom.dsY, {empty:!card});
+      if (card){
+        drawCard(card, TopGeom.dsX + i*TopGeom.dsStep, TopGeom.dsY);
+      }
     }
     drawCard(stock.length ? {faceUp:false} : null, TopGeom.stockX, TopGeom.stockY);
     stockHit = {x:TopGeom.stockX, y:TopGeom.stockY, w:CARD_W, h:CARD_H};
@@ -584,18 +624,18 @@
       drawCard(top, slot.x, slot.y, {empty:!top, suitHint:SUITS[i%4]});
     }
 
-    const tY = tableauTopY();
+    const baseTY = tableauTopY();
     for (let c=0;c<10;c++){
       const x = colX(c);
       const col = tableau[c];
       if (!col.length){
-        drawCard(null,x,tY);
+        drawCard(null,x,baseTY);
         continue;
       }
       for (let i=0;i<col.length;i++){
         const card = col[i];
         if (drag && drag.from.type==='tableau' && drag.from.col===c && i>=drag.from.idx) continue;
-        drawCard(card, x, tY + i*OVERLAP);
+        drawCard(card, x, tableauRowTop(c, i));
       }
     }
 
@@ -608,7 +648,7 @@
         baseY = baseY * (1 - strength) + drag.snap.y * strength;
       }
       for (let i=0;i<drag.cards.length;i++){
-        drawCard(drag.cards[i], baseX, baseY + i*OVERLAP, {ghost:true,highlight:true});
+        drawCard(drag.cards[i], baseX, baseY + i*FACE_UP_OVERLAP, {ghost:true,highlight:true});
       }
     }
     positionControls();
@@ -655,7 +695,7 @@
           continue;
         }
         for (let i=col.length-1;i>=0;i--){
-          const cy = tY + i*OVERLAP;
+          const cy = tableauRowTop(c, i);
           if (x>cx && x<cx+CARD_W && y>cy && y<cy+CARD_H)
             return {type:'tableau', col:c, row:i};
         }
@@ -747,7 +787,7 @@
         continue;
       }
       for (let i=col.length-1;i>=0;i--){
-        const cy = tY + i*OVERLAP;
+        const cy = tableauRowTop(c, i);
         pushCandidate({type:'tableau', col:c, row:i}, left, cy - baseTY, right, cy + CARD_H + baseTY, 0.25 + (col.length - 1 - i) * 0.001);
       }
     }
@@ -1068,7 +1108,7 @@
       if (drag.from.type === 'tableau' && drop.col === drag.from.col && depth > drag.from.idx){
         depth = Math.max(drag.from.idx, depth - drag.cards.length);
       }
-      const snapY = tableauTopY() + depth * OVERLAP;
+      const snapY = tableauRowTop(drop.col, depth);
       return { x: colX(drop.col), y: snapY, strength: 0.88 };
     }
 
@@ -1446,14 +1486,14 @@
 
   function hint(){
     if (isAnimatingDeal) return;
-    const tY = tableauTopY();
     for (let c=0;c<10;c++){
       const col = tableau[c];
       const top = col[col.length-1];
       if (!top) continue;
       for (let f=0;f<8;f++){
         if (canPlaceOnFoundation(top,f)){
-          flash(()=>{ drawCard(top, colX(c), tY + (col.length-1)*OVERLAP, {highlight:true}); });
+          const topY = tableauRowTop(c, col.length - 1);
+          flash(()=>{ drawCard(top, colX(c), topY, {highlight:true}); });
           return;
         }
       }
@@ -1475,7 +1515,8 @@
         for (let to=0;to<10;to++){
           if (to===from) continue;
           if (canPlaceOnTableau(card,to)){
-            flash(()=>{ drawCard(card, colX(from), tY + i*OVERLAP, {highlight:true}); });
+            const hintY = tableauRowTop(from, i);
+            flash(()=>{ drawCard(card, colX(from), hintY, {highlight:true}); });
             return;
           }
         }
