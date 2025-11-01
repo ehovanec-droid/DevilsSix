@@ -49,20 +49,25 @@
     #ui {
       position: absolute;
       display: flex;
-      flex-direction: column;
-      gap: 12px;
-      justify-content: center;
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+      justify-content: flex-start;
       background: linear-gradient(180deg, rgba(35, 22, 13, 0.85) 0%, rgba(22, 12, 6, 0.92) 100%);
       border-radius: 16px;
       border: 1px solid rgba(255, 222, 166, 0.32);
-      padding: 18px 20px;
+      padding: 16px 18px;
       box-shadow: 0 18px 32px rgba(0, 0, 0, 0.45);
       pointer-events: none;
       transform: none;
-      min-width: 172px;
+      min-width: 0;
     }
     #ui .btn {
-      width: 100%;
+      width: auto;
+      padding: 5px 12px;
+      font-size: 11px;
+      letter-spacing: 0.09em;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
     }
     .btn {
       background: linear-gradient(180deg, rgba(71, 48, 24, 0.95) 0%, rgba(38, 23, 12, 0.95) 90%);
@@ -244,7 +249,8 @@
 
   function layout(w){
     const proposed = Math.floor((w - PADDING * 2) / 12.6) + 4;
-    CARD_W = Math.max(72, Math.min(116, proposed));
+    const baseWidth = Math.max(72, Math.min(116, proposed));
+    CARD_W = Math.min(120, baseWidth + 4);
     CARD_H = Math.max(94, Math.floor(CARD_W * 1.45) - 2);
     OVERLAP = Math.max(22, Math.floor(CARD_H * 0.23));
   }
@@ -557,39 +563,129 @@
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
   function hitAt(x,y,loose=false){
-    const fMarginX = loose ? Math.max(14, Math.floor(CARD_W * 0.5)) : 0;
-    const fMarginY = loose ? Math.max(14, Math.floor(CARD_H * 0.5)) : 0;
-    const tMarginX = loose ? Math.max(18, Math.floor(CARD_W * 0.55)) : 0;
-    const tMarginY = loose ? Math.max(20, Math.floor(CARD_H * 0.55)) : 0;
+    if (!loose){
+      for (let i=0;i<8;i++){
+        const s = TopGeom.fSlots[i];
+        if (s && x>s.x && x<s.x+CARD_W && y>s.y && y<s.y+CARD_H)
+          return {type:'foundation', idx:i};
+      }
+      for (let i=0;i<devilsSix.length;i++){
+        const dx = TopGeom.dsX + i*TopGeom.dsStep, dy=TopGeom.dsY;
+        if (x>dx && x<dx+CARD_W && y>dy && y<dy+CARD_H)
+          return {type:'devils', idx:i};
+      }
+      if (stock.length && x>stockHit.x && x<stockHit.x+CARD_W && y>stockHit.y && y<stockHit.y+CARD_H)
+        return {type:'stock'};
 
-    for (let i=0;i<8;i++){
-      const s = TopGeom.fSlots[i];
-      if (x>s.x - fMarginX && x<s.x+CARD_W + fMarginX && y>s.y - fMarginY && y<s.y+CARD_H + fMarginY)
-        return {type:'foundation', idx:i};
+      const tY = tableauTopY();
+      for (let c=0;c<10;c++){
+        const cx = colX(c);
+        const col = tableau[c];
+        if (!col.length){
+          if (x>cx && x<cx+CARD_W && y>tY && y<tY+CARD_H) return {type:'tableau', col:c, row:-1};
+          continue;
+        }
+        for (let i=col.length-1;i>=0;i--){
+          const cy = tY + i*OVERLAP;
+          if (x>cx && x<cx+CARD_W && y>cy && y<cy+CARD_H)
+            return {type:'tableau', col:c, row:i};
+        }
+      }
+      return null;
     }
-    for (let i=0;i<devilsSix.length;i++){
-      const dx = TopGeom.dsX + i*TopGeom.dsStep, dy=TopGeom.dsY;
-      if (x>dx && x<dx+CARD_W && y>dy && y<dy+CARD_H)
-        return {type:'devils', idx:i};
-    }
-    if (stock.length && x>stockHit.x && x<stockHit.x+CARD_W && y>stockHit.y && y<stockHit.y+CARD_H)
-      return {type:'stock'};
+
+    const candidates = [];
+    const pushCandidate = (hit, left, top, right, bottom, priority=0)=>{
+      if (x < left || x > right || y < top || y > bottom) return;
+      const centerX = (left + right) / 2;
+      const centerY = (top + bottom) / 2;
+      const halfW = Math.max(1, (right - left) / 2);
+      const halfH = Math.max(1, (bottom - top) / 2);
+      const normX = (x - centerX) / halfW;
+      const normY = (y - centerY) / halfH;
+      const score = normX * normX + normY * normY + priority;
+      candidates.push({score, hit});
+    };
 
     const tY = tableauTopY();
+    const gutter = tableauGutter();
+    const baseFX = Math.max(26, Math.floor(CARD_W * 0.85));
+    const baseFY = Math.max(26, Math.floor(CARD_H * 0.85));
+
+    for (let i=0;i<TopGeom.fSlots.length;i++){
+      const s = TopGeom.fSlots[i];
+      if (!s) continue;
+      let left = s.x - baseFX;
+      let right = s.x + CARD_W + baseFX;
+      let top = s.y - baseFY;
+      let bottom = s.y + CARD_H + baseFY;
+
+      if (TopGeom.fCols){
+        if (i % TopGeom.fCols !== 0){
+          const prev = TopGeom.fSlots[i-1];
+          if (prev){
+            const gap = s.x - (prev.x + CARD_W);
+            const limit = Math.max(0, Math.floor(gap / 2));
+            left = Math.max(left, s.x - limit);
+          }
+        }
+        if (i % TopGeom.fCols !== TopGeom.fCols - 1){
+          const next = TopGeom.fSlots[i+1];
+          if (next){
+            const gap = next.x - (s.x + CARD_W);
+            const limit = Math.max(0, Math.floor(gap / 2));
+            right = Math.min(right, s.x + CARD_W + limit);
+          }
+        }
+      }
+      const aboveIdx = i - TopGeom.fCols;
+      if (aboveIdx >= 0){
+        const above = TopGeom.fSlots[aboveIdx];
+        if (above){
+          const gap = s.y - (above.y + CARD_H);
+          const limit = Math.max(0, Math.floor(gap / 2));
+          top = Math.max(top, s.y - limit);
+        }
+      }
+      const belowIdx = i + TopGeom.fCols;
+      if (belowIdx < TopGeom.fSlots.length){
+        const below = TopGeom.fSlots[belowIdx];
+        if (below){
+          const gap = below.y - (s.y + CARD_H);
+          const limit = Math.max(0, Math.floor(gap / 2));
+          bottom = Math.min(bottom, s.y + CARD_H + limit);
+        }
+      }
+
+      pushCandidate({type:'foundation', idx:i}, left, top, right, bottom, 0);
+    }
+
+    const baseTX = Math.max(26, Math.floor(CARD_W * 0.95));
+    const baseTY = Math.max(28, Math.floor(CARD_H * 0.65));
+    const horizLimit = Math.max(4, Math.floor(gutter / 2));
+
     for (let c=0;c<10;c++){
       const cx = colX(c);
       const col = tableau[c];
+      let leftExpand = Math.min(baseTX, horizLimit);
+      let rightExpand = Math.min(baseTX, horizLimit);
+      if (c === 0) leftExpand = baseTX;
+      if (c === tableau.length - 1) rightExpand = baseTX;
+      const left = cx - leftExpand;
+      const right = cx + CARD_W + rightExpand;
       if (!col.length){
-        if (x>cx - tMarginX && x<cx+CARD_W + tMarginX && y>tY - tMarginY && y<tY+CARD_H + tMarginY) return {type:'tableau', col:c, row:-1};
+        pushCandidate({type:'tableau', col:c, row:-1}, left, tY - baseTY, right, tY + CARD_H + baseTY, 0.25);
         continue;
       }
       for (let i=col.length-1;i>=0;i--){
         const cy = tY + i*OVERLAP;
-        if (x>cx - tMarginX && x<cx+CARD_W + tMarginX && y>cy - tMarginY && y<cy+CARD_H + tMarginY)
-          return {type:'tableau', col:c, row:i};
+        pushCandidate({type:'tableau', col:c, row:i}, left, cy - baseTY, right, cy + CARD_H + baseTY, 0.25 + (col.length - 1 - i) * 0.001);
       }
     }
-    return null;
+
+    if (!candidates.length) return null;
+    candidates.sort((a,b)=>a.score - b.score);
+    return candidates[0].hit;
   }
 
   function getRunLength(col, start){
@@ -678,7 +774,7 @@
     if (newDealButton) newDealButton.disabled = true;
     updateUI(true);
 
-    const stepDelay = Math.max(90, Math.min(240, Math.floor(2400 / dealt.length)));
+    const stepDelay = Math.max(45, Math.min(140, Math.floor(1200 / Math.max(1, dealt.length))));
     try {
       for (let i=0;i<dealt.length;i++){
         const step = dealt[i];
@@ -772,22 +868,38 @@
     }
     for (const values of Object.values(suitRuns)){
       if (values.length < 3) continue;
-      values.sort((a,b)=>b-a);
-      let run = 1;
-      let prev = values[0];
-      for (let i=1;i<values.length;i++){
-        const cur = values[i];
-        if (cur === prev) continue;
-        if (cur === prev - 1){
-          run++;
-          if (run >= 3) return true;
-        } else {
-          run = 1;
+      const unique = Array.from(new Set(values)).sort((a,b)=>b-a);
+      for (let i=0;i<=unique.length-3;i++){
+        if (unique[i] === unique[i+1] + 1 && unique[i+1] === unique[i+2] + 1){
+          return true;
         }
-        prev = cur;
       }
     }
     return false;
+  }
+
+  function repairDevilsSix(cards){
+    for (let i=0;i<cards.length;i++){
+      const original = cards[i];
+      const originalFace = original.faceUp;
+      for (let j=0;j<deck.length;j++){
+        const replacement = deck[j];
+        const replacementFace = replacement.faceUp;
+        cards[i] = replacement;
+        replacement.faceUp = true;
+        original.faceUp = false;
+        if (!isDevilsSixUnwinnable(cards)){
+          deck[j] = original;
+          return cards;
+        }
+        cards[i] = original;
+        original.faceUp = originalFace;
+        replacement.faceUp = replacementFace;
+      }
+      cards[i] = original;
+      original.faceUp = originalFace;
+    }
+    return null;
   }
 
   function preparePlayableDevilsSix(){
@@ -801,6 +913,12 @@
         return candidate;
       }
       attempt++;
+    }
+
+    const repaired = repairDevilsSix(candidate);
+    if (repaired){
+      console.warn('Devil\'s Six required repair after repeated unwinnable draws.');
+      return repaired;
     }
     console.warn('Unable to find a guaranteed winnable Devil\'s Six after many attempts; proceeding with current deal.');
     return candidate;
@@ -892,7 +1010,7 @@
       drag.renderX = x - drag.offsetX;
       drag.renderY = y - drag.offsetY;
       drag.snap = computeDragSnap(x, y);
-      queueDraw(true);
+      queueDraw();
     }
   }
 
