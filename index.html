@@ -143,7 +143,7 @@
       display: block;
       width: 100%;
       height: auto;
-      touch-action: none;
+      touch-action: pan-y pinch-zoom;
       min-width: 100%;
     }
     #message {
@@ -765,6 +765,10 @@
           bottom = Math.min(bottom, s.y + CARD_H + limit);
         }
       }
+
+      const foundationClearance = Math.max(8, Math.floor(CARD_H * 0.18));
+      bottom = Math.min(bottom, tY - foundationClearance);
+      if (bottom <= top) continue;
 
       pushCandidate({type:'foundation', idx:i}, left, top, right, bottom, 0);
     }
