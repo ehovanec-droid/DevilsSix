@@ -107,12 +107,15 @@
       border-radius: 24px;
       padding: 2px 22px 30px;
       box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.55), 0 24px 50px rgba(0, 0, 0, 0.55);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
     canvas {
       display: block;
       width: 100%;
       height: auto;
       touch-action: none;
+      min-width: 100%;
     }
     #message {
       position: absolute;
@@ -248,11 +251,12 @@
   };
 
   function layout(w){
-    const proposed = Math.floor((w - PADDING * 2) / 12.6) + 4;
-    const baseWidth = Math.max(72, Math.min(116, proposed));
-    CARD_W = Math.min(120, baseWidth + 4);
-    CARD_H = Math.max(94, Math.floor(CARD_W * 1.45) - 2);
-    OVERLAP = Math.max(22, Math.floor(CARD_H * 0.23));
+    const available = Math.max(260, w - PADDING * 2);
+    const proposed = Math.floor(available / 12.6) + 4;
+    const baseWidth = Math.max(52, Math.min(114, proposed));
+    CARD_W = Math.max(44, Math.min(120, baseWidth + 4));
+    CARD_H = Math.max(92, Math.floor(CARD_W * 1.45) - 2);
+    OVERLAP = Math.max(20, Math.floor(CARD_H * 0.23));
   }
   function tableauGutter(){
     const available = boardWidth - PADDING * 2 - CARD_W * 10;
@@ -319,16 +323,33 @@
     return Math.max(window.innerHeight * 0.82, tTop + (tallest - 1) * OVERLAP + CARD_H + PADDING);
   }
   function syncBoardMetrics(){
-    const width = canvas.clientWidth || canvas.parentElement.clientWidth || window.innerWidth;
-    boardWidth = width;
+    const containerWidth = canvas.parentElement ? canvas.parentElement.clientWidth : 0;
+    const width = Math.max(320, canvas.clientWidth || containerWidth || window.innerWidth);
     layout(width);
+
+    let workingWidth = width;
+    boardWidth = workingWidth;
+    let gutter = Math.max(6, Math.floor((boardWidth - PADDING * 2 - CARD_W * 10) / 9));
+    let required = PADDING * 2 + CARD_W * 10 + gutter * 9;
+
+    if (required > workingWidth){
+      workingWidth = required;
+      boardWidth = workingWidth;
+      gutter = Math.max(6, Math.floor((boardWidth - PADDING * 2 - CARD_W * 10) / 9));
+      required = PADDING * 2 + CARD_W * 10 + gutter * 9;
+    }
+
+    boardWidth = Math.max(workingWidth, required);
     computeTopGeometry();
+
     const desiredHeight = computeBoardHeight();
     if (Math.abs(desiredHeight - boardHeight) > 1){
       boardHeight = desiredHeight;
       canvas.style.height = `${boardHeight}px`;
     }
-    canvas.width = Math.floor(width * DPR);
+
+    canvas.style.width = `${boardWidth}px`;
+    canvas.width = Math.floor(boardWidth * DPR);
     canvas.height = Math.floor(boardHeight * DPR);
     ctx.setTransform(DPR,0,0,DPR,0,0);
   }
@@ -609,8 +630,8 @@
 
     const tY = tableauTopY();
     const gutter = tableauGutter();
-    const baseFX = Math.max(26, Math.floor(CARD_W * 0.85));
-    const baseFY = Math.max(26, Math.floor(CARD_H * 0.85));
+    const baseFX = Math.max(30, Math.floor(CARD_W * 0.95));
+    const baseFY = Math.max(28, Math.floor(CARD_H * 0.92));
 
     for (let i=0;i<TopGeom.fSlots.length;i++){
       const s = TopGeom.fSlots[i];
@@ -660,9 +681,9 @@
       pushCandidate({type:'foundation', idx:i}, left, top, right, bottom, 0);
     }
 
-    const baseTX = Math.max(26, Math.floor(CARD_W * 0.95));
-    const baseTY = Math.max(28, Math.floor(CARD_H * 0.65));
-    const horizLimit = Math.max(4, Math.floor(gutter / 2));
+    const baseTX = Math.max(32, Math.floor(CARD_W * 1.08));
+    const baseTY = Math.max(34, Math.floor(CARD_H * 0.74));
+    const horizLimit = Math.max(6, Math.floor(gutter * 0.75));
 
     for (let c=0;c<10;c++){
       const cx = colX(c);
@@ -860,18 +881,20 @@
   }
 
   function isDevilsSixUnwinnable(cards){
-    const suitRuns = {};
+    const suitOrder = {};
     for (let i=cards.length-1;i>=0;i--){
       const card = cards[i];
-      if (!suitRuns[card.suit]) suitRuns[card.suit] = [];
-      suitRuns[card.suit].push(card.value);
+      if (!suitOrder[card.suit]) suitOrder[card.suit] = [];
+      suitOrder[card.suit].push(card.value);
     }
-    for (const values of Object.values(suitRuns)){
-      if (values.length < 3) continue;
-      const unique = Array.from(new Set(values)).sort((a,b)=>b-a);
-      for (let i=0;i<=unique.length-3;i++){
-        if (unique[i] === unique[i+1] + 1 && unique[i+1] === unique[i+2] + 1){
-          return true;
+    for (const ordered of Object.values(suitOrder)){
+      let streak = 1;
+      for (let i=0;i<ordered.length-1;i++){
+        if (ordered[i] === ordered[i+1] + 1){
+          streak++;
+          if (streak >= 2) return true;
+        } else {
+          streak = 1;
         }
       }
     }
