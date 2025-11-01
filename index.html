@@ -69,6 +69,17 @@
       letter-spacing: 0.09em;
       box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
     }
+    #stockCounter {
+      position: absolute;
+      pointer-events: none;
+      color: #ffffff;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      text-align: center;
+      white-space: nowrap;
+    }
     .btn {
       background: linear-gradient(180deg, rgba(71, 48, 24, 0.95) 0%, rgba(38, 23, 12, 0.95) 90%);
       border: none;
@@ -180,6 +191,7 @@
         <button id="newGame" class="btn">New Deal</button>
         <button id="undo" class="btn">Undo</button>
       </div>
+      <div id="stockCounter"></div>
       <canvas id="game"></canvas>
       <div id="message">
         <div id="messageContent">
@@ -203,6 +215,7 @@
   const undoButton = document.getElementById('undo');
   const hintButton = document.getElementById('hint');
   const playAgainButton = document.getElementById('playAgain');
+  const stockCounter = document.getElementById('stockCounter');
   const SUITS = ['\u2660','\u2665','\u2666','\u2663'];
   const COLORS = { '\u2660':'black', '\u2663':'black', '\u2665':'red', '\u2666':'red' };
   const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
@@ -359,13 +372,48 @@
       controls.style.left = '';
       controls.style.top = '';
       controls.style.transform = '';
+      if (stockCounter) positionStockCounter();
       return;
     }
-    const offsetBelowStock = Math.max(18, Math.floor(CARD_H * 0.18));
-    const offsetLeft = Math.max(PADDING, TopGeom.stockX);
-    controls.style.left = `${offsetLeft}px`;
-    controls.style.top = `${TopGeom.stockY + CARD_H + offsetBelowStock}px`;
+    const dsSlots = Math.max(devilsSix.length, 6);
+    const dsRightEdge = TopGeom.dsX + CARD_W + TopGeom.dsStep * (dsSlots - 1);
+    const foundationLeftEdge = TopGeom.fSlots.length ? TopGeom.fSlots[0].x : dsRightEdge + CARD_W;
+    const gapCenter = dsRightEdge + Math.max(0, (foundationLeftEdge - dsRightEdge) / 2);
+    const controlsWidth = controls.offsetWidth || 0;
+    const controlsHeight = controls.offsetHeight || 0;
+    if (controlsWidth){
+      controls.style.left = `${Math.round(gapCenter - controlsWidth / 2)}px`;
+    } else {
+      controls.style.left = `${Math.round(gapCenter)}px`;
+    }
+    if (controlsHeight){
+      const dsCenterY = TopGeom.dsY + CARD_H / 2;
+      controls.style.top = `${Math.round(dsCenterY - controlsHeight / 2)}px`;
+    } else {
+      const fallbackOffset = Math.max(18, Math.floor(CARD_H * 0.18));
+      controls.style.top = `${Math.round(TopGeom.stockY + CARD_H + fallbackOffset)}px`;
+    }
     controls.style.transform = 'none';
+    if (stockCounter) positionStockCounter();
+  }
+
+  function positionStockCounter(){
+    if (!stockCounter) return;
+    const counterWidth = stockCounter.offsetWidth || 0;
+    const offsetBelow = Math.max(6, Math.floor(CARD_H * 0.08));
+    const baseLeft = TopGeom.stockX + CARD_W / 2 - counterWidth / 2;
+    stockCounter.style.left = `${Math.round(baseLeft)}px`;
+    stockCounter.style.top = `${Math.round(TopGeom.stockY + CARD_H + offsetBelow)}px`;
+  }
+
+  function updateStockCounter(){
+    if (!stockCounter) return;
+    if (stock.length === 1){
+      stockCounter.textContent = '1 card';
+    } else {
+      stockCounter.textContent = `${stock.length} cards`;
+    }
+    positionStockCounter();
   }
   function render(){
     syncBoardMetrics();
@@ -978,6 +1026,7 @@
   }
 
   function updateUI(disable=false){
+    updateStockCounter();
     if (undoButton) undoButton.disabled = disable || undoStack.length===0;
     if (hintButton) hintButton.disabled = disable;
   }
