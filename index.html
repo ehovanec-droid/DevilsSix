@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0b1726">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Devil's Six">
   <title>Churchill Solitaire — Devil's Six</title>
   <style>
     html,
@@ -1782,6 +1787,20 @@
   resizeCanvas();
   newGame();
   runTests();
+
+  // Offline testing steps:
+  // 1. Visit the site online.
+  // 2. Wait for the service worker to install.
+  // 3. Reload once.
+  // 4. Enable Airplane Mode or disconnect from the network.
+  // 5. Reload the page to confirm the game works offline.
+  // 6. In Safari, "Add to Home Screen" and test offline from the icon.
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW registration failed:', err));
+    });
+  }
   </script>
 </body>
 </html>
