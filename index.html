@@ -139,6 +139,11 @@
       scrollbar-width: thin;
       scrollbar-color: rgba(246, 227, 176, 0.18) transparent;
     }
+    #boardArea.scroll-locked {
+      touch-action: none;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: auto;
+    }
     canvas {
       display: block;
       width: 100%;
@@ -229,6 +234,7 @@
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
+  const boardArea = document.getElementById('boardArea');
   const controls = document.getElementById('ui');
   const newDealButton = document.getElementById('newGame');
   const undoButton = document.getElementById('undo');
@@ -261,6 +267,14 @@
     if (touchActionLockId !== id) return;
     touchActionLockId = null;
     setTouchActionLock(false);
+  }
+
+  let scrollLocked = false;
+  function setScrollLock(locked){
+    if (!boardArea) return;
+    if (scrollLocked === locked) return;
+    scrollLocked = locked;
+    boardArea.classList.toggle('scroll-locked', locked);
   }
 
   class Card {
@@ -486,6 +500,108 @@
   let stockHit = {x:0,y:0,w:0,h:0};
   let drag = null;
   let mouseX = 0, mouseY = 0;
+  let autoScrollFrame = null;
+  let autoScrollDX = 0;
+  let autoScrollDY = 0;
+  let lastPointerClientX = 0;
+  let lastPointerClientY = 0;
+  let havePointerClient = false;
+
+  function recordPointerClientCoords(clientX, clientY){
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return;
+    lastPointerClientX = clientX;
+    lastPointerClientY = clientY;
+    havePointerClient = true;
+  }
+
+  function stopAutoScroll(){
+    if (autoScrollFrame !== null){
+      cancelAnimationFrame(autoScrollFrame);
+      autoScrollFrame = null;
+    }
+    autoScrollDX = 0;
+    autoScrollDY = 0;
+  }
+
+  function autoScrollStep(){
+    autoScrollFrame = null;
+    if (!drag || !boardArea) return;
+    if (!autoScrollDX && !autoScrollDY) return;
+    if (autoScrollDX) boardArea.scrollLeft += autoScrollDX;
+    if (autoScrollDY) boardArea.scrollTop += autoScrollDY;
+    autoScrollFrame = requestAnimationFrame(autoScrollStep);
+  }
+
+  function setAutoScrollVector(dx, dy){
+    if (autoScrollDX === dx && autoScrollDY === dy) return;
+    autoScrollDX = dx;
+    autoScrollDY = dy;
+    if (!dx && !dy){
+      if (autoScrollFrame !== null){
+        cancelAnimationFrame(autoScrollFrame);
+        autoScrollFrame = null;
+      }
+      return;
+    }
+    if (autoScrollFrame === null){
+      autoScrollFrame = requestAnimationFrame(autoScrollStep);
+    }
+  }
+
+  function computeAutoScroll(pointerClientX, pointerClientY){
+    if (!boardArea) return {dx:0, dy:0};
+    const rect = boardArea.getBoundingClientRect();
+    const res = {dx:0, dy:0};
+    const canScrollY = (boardArea.scrollHeight - boardArea.clientHeight) > 1;
+    const canScrollX = (boardArea.scrollWidth - boardArea.clientWidth) > 1;
+    if (canScrollY){
+      const marginY = Math.min(180, Math.max(60, rect.height * 0.24));
+      const topEdge = rect.top + marginY;
+      const bottomEdge = rect.bottom - marginY;
+      if (pointerClientY < topEdge){
+        const dist = topEdge - pointerClientY;
+        const step = Math.max(3, marginY / 18);
+        res.dy = -Math.min(26, Math.round(dist / step));
+      } else if (pointerClientY > bottomEdge){
+        const dist = pointerClientY - bottomEdge;
+        const step = Math.max(3, marginY / 18);
+        res.dy = Math.min(26, Math.round(dist / step));
+      }
+    }
+    if (canScrollX){
+      const marginX = Math.min(160, Math.max(48, rect.width * 0.18));
+      const leftEdge = rect.left + marginX;
+      const rightEdge = rect.right - marginX;
+      if (pointerClientX < leftEdge){
+        const dist = leftEdge - pointerClientX;
+        const step = Math.max(3, marginX / 18);
+        res.dx = -Math.min(24, Math.round(dist / step));
+      } else if (pointerClientX > rightEdge){
+        const dist = pointerClientX - rightEdge;
+        const step = Math.max(3, marginX / 18);
+        res.dx = Math.min(24, Math.round(dist / step));
+      }
+    }
+    if (Math.abs(res.dx) < 2) res.dx = 0;
+    if (Math.abs(res.dy) < 2) res.dy = 0;
+    return res;
+  }
+
+  function updateAutoScrollFromCanvasCoords(x, y){
+    if (!boardArea || !drag){
+      setAutoScrollVector(0,0);
+      return;
+    }
+    let pointerX = lastPointerClientX;
+    let pointerY = lastPointerClientY;
+    if (!havePointerClient){
+      const rect = canvas.getBoundingClientRect();
+      pointerX = rect.left + x;
+      pointerY = rect.top + y;
+    }
+    const vec = computeAutoScroll(pointerX, pointerY);
+    setAutoScrollVector(vec.dx, vec.dy);
+  }
 
   function drawRoundRect(x,y,w,h,r){
     const rr = Math.min(r, Math.min(w,h)/2);
@@ -1180,7 +1296,10 @@
       drag.renderX = x - drag.offsetX;
       drag.renderY = y - drag.offsetY;
       drag.snap = computeDragSnap(x, y);
+      updateAutoScrollFromCanvasCoords(x, y);
       queueDraw();
+    } else {
+      setAutoScrollVector(0,0);
     }
   }
 
@@ -1285,6 +1404,8 @@
         snap: null
       };
       drag.snap = computeDragSnap(x, y);
+      setScrollLock(true);
+      updateAutoScrollFromCanvasCoords(x, y);
       queueDraw();
       return true;
     }
@@ -1304,6 +1425,8 @@
         snap: null
       };
       drag.snap = computeDragSnap(x, y);
+      setScrollLock(true);
+      updateAutoScrollFromCanvasCoords(x, y);
       queueDraw();
       return true;
     }
@@ -1315,60 +1438,64 @@
     if (!drag){
       mouseX = x;
       mouseY = y;
+      setAutoScrollVector(0,0);
       return;
     }
     mouseX = x;
     mouseY = y;
+    const activeDrag = drag;
     const drop = hitAt(mouseX, mouseY, true);
-    const moving = drag.cards[0];
+    const moving = activeDrag.cards[0];
     let moved = false;
 
     if (drop){
       // to foundation
-      if (drop.type === 'foundation' && drag.cards.length === 1 && canPlaceOnFoundation(moving, drop.idx)){
+      if (drop.type === 'foundation' && activeDrag.cards.length === 1 && canPlaceOnFoundation(moving, drop.idx)){
         foundations[drop.idx].push(moving);
-        if (drag.from.type === 'tableau'){
-          tableau[drag.from.col].splice(drag.from.idx,1);
-          flipTop(drag.from.col);
+        if (activeDrag.from.type === 'tableau'){
+          tableau[activeDrag.from.col].splice(activeDrag.from.idx,1);
+          flipTop(activeDrag.from.col);
         } else {
-          devilsSix.splice(drag.from.idx,1);
+          devilsSix.splice(activeDrag.from.idx,1);
         }
-        undoStack.push({kind:'toFound', from:JSON.parse(JSON.stringify(drag.from)), fIdx:drop.idx, card:moving});
+        undoStack.push({kind:'toFound', from:JSON.parse(JSON.stringify(activeDrag.from)), fIdx:drop.idx, card:moving});
         moved = true;
       }
       // tableau-to-tableau
-      else if (drop.type === 'tableau' && drag.from.type === 'tableau' && canPlaceOnTableau(moving, drop.col)){
-        const run = drag.cards.slice();
+      else if (drop.type === 'tableau' && activeDrag.from.type === 'tableau' && canPlaceOnTableau(moving, drop.col)){
+        const run = activeDrag.cards.slice();
         const toCol = drop.col;
-        const fromCol = drag.from.col;
+        const fromCol = activeDrag.from.col;
         tableau[toCol].push(...run);
-        tableau[fromCol].splice(drag.from.idx, run.length);
+        tableau[fromCol].splice(activeDrag.from.idx, run.length);
         refreshAnchorForColumn(toCol);
         flipTop(fromCol);
 
         undoStack.push({
           kind:'tab2tab',
-          from:{col:fromCol, idx:drag.from.idx},
+          from:{col:fromCol, idx:activeDrag.from.idx},
           toCol:toCol,
           count:run.length
         });
         moved = true;
       }
-      else if (drop.type === 'tableau' && drag.from.type === 'devils' && canPlaceOnTableau(moving, drop.col)){
+      else if (drop.type === 'tableau' && activeDrag.from.type === 'devils' && canPlaceOnTableau(moving, drop.col)){
         const toCol = drop.col;
         tableau[toCol].push(moving);
-        devilsSix.splice(drag.from.idx,1);
+        devilsSix.splice(activeDrag.from.idx,1);
         refreshAnchorForColumn(toCol);
         undoStack.push({
           kind:'devils2tab',
           toCol,
-          fromIdx: drag.from.idx
+          fromIdx: activeDrag.from.idx
         });
         moved = true;
       }
     }
 
     drag = null;
+    stopAutoScroll();
+    setScrollLock(false);
     render();
     if (moved){
       updateUI();
@@ -1379,6 +1506,8 @@
   function cancelDrag(){
     if (drag){
       drag = null;
+      stopAutoScroll();
+      setScrollLock(false);
       render();
     }
   }
@@ -1386,7 +1515,10 @@
   canvas.addEventListener('contextmenu', e=> e.preventDefault());
 
   const supportsPointer = 'PointerEvent' in window;
-  if (supportsPointer){
+  const ua = navigator.userAgent || '';
+  const isiOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const preferTouchEvents = !!isiOS;
+  if (supportsPointer && !preferTouchEvents){
     let activePointerId = null;
     const isPrimaryPointer = e => {
       if (e.pointerType === 'mouse') return e.button === 0;
@@ -1395,6 +1527,7 @@
     canvas.addEventListener('pointerdown', e=>{
       if (activePointerId !== null) return;
       if (!isPrimaryPointer(e)) return;
+      recordPointerClientCoords(e.clientX, e.clientY);
       const pos = getCanvasPos(e.clientX, e.clientY);
       const handled = handlePrimaryDown(pos.x, pos.y);
       const startedDrag = !!drag;
@@ -1409,6 +1542,7 @@
     }, {passive:false});
     canvas.addEventListener('pointermove', e=>{
       if (activePointerId !== e.pointerId) return;
+      recordPointerClientCoords(e.clientX, e.clientY);
       const pos = getCanvasPos(e.clientX, e.clientY);
       handlePrimaryMove(pos.x, pos.y);
       if (drag && e.pointerType !== 'mouse') e.preventDefault();
@@ -1416,6 +1550,7 @@
     const finishPointer = e=>{
       const wasActive = activePointerId === e.pointerId;
       if (wasActive){
+        recordPointerClientCoords(e.clientX, e.clientY);
         const pos = getCanvasPos(e.clientX, e.clientY);
         handlePrimaryUp(pos.x, pos.y);
         activePointerId = null;
@@ -1432,6 +1567,7 @@
     const cancelPointer = e=>{
       const wasActive = activePointerId === e.pointerId;
       if (wasActive){
+        recordPointerClientCoords(e.clientX, e.clientY);
         activePointerId = null;
         try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
         cancelDrag();
@@ -1452,16 +1588,19 @@
     });
   } else {
     canvas.addEventListener('mousemove', e=>{
+      recordPointerClientCoords(e.clientX, e.clientY);
       const pos = getCanvasPos(e.clientX, e.clientY);
       handlePrimaryMove(pos.x, pos.y);
     });
     canvas.addEventListener('mousedown', e=>{
       if (e.button !== 0) return;
+      recordPointerClientCoords(e.clientX, e.clientY);
       const pos = getCanvasPos(e.clientX, e.clientY);
       const handled = handlePrimaryDown(pos.x, pos.y);
       if (handled) e.preventDefault();
     });
     window.addEventListener('mouseup', e=>{
+      recordPointerClientCoords(e.clientX, e.clientY);
       const pos = getCanvasPos(e.clientX, e.clientY);
       handlePrimaryUp(pos.x, pos.y);
     });
@@ -1471,6 +1610,7 @@
       if (activeTouchId !== null) return;
       const touch = e.changedTouches[0];
       if (!touch) return;
+      recordPointerClientCoords(touch.clientX, touch.clientY);
       const pos = getCanvasPos(touch.clientX, touch.clientY);
       const handled = handlePrimaryDown(pos.x, pos.y);
       const startedDrag = !!drag;
@@ -1486,6 +1626,7 @@
       for (let i=0;i<e.changedTouches.length;i++){
         const touch = e.changedTouches[i];
         if (touch.identifier === activeTouchId){
+          recordPointerClientCoords(touch.clientX, touch.clientY);
           const pos = getCanvasPos(touch.clientX, touch.clientY);
           handlePrimaryMove(pos.x, pos.y);
           if (drag) e.preventDefault();
@@ -1499,6 +1640,7 @@
         const touch = e.changedTouches[i];
         const id = touch.identifier;
         if (activeTouchId !== null && id === activeTouchId){
+          recordPointerClientCoords(touch.clientX, touch.clientY);
           const pos = getCanvasPos(touch.clientX, touch.clientY);
           handlePrimaryUp(pos.x, pos.y);
           activeTouchId = null;
@@ -1516,6 +1658,7 @@
         const touch = e.changedTouches[i];
         const id = touch.identifier;
         if (activeTouchId !== null && id === activeTouchId){
+          recordPointerClientCoords(touch.clientX, touch.clientY);
           activeTouchId = null;
           cancelDrag();
           unlockTouchAction(id);
