@@ -814,17 +814,25 @@
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
   function hitAt(x,y,loose=false){
+    const hitDevilsSix = ()=>{
+      let best = null;
+      for (let i=0;i<devilsSix.length;i++){
+        const dx = TopGeom.dsX + i*TopGeom.dsStep;
+        const dy = TopGeom.dsY;
+        if (x>dx && x<dx+CARD_W && y>dy && y<dy+CARD_H){
+          if (!best || i > best.idx) best = {type:'devils', idx:i};
+        }
+      }
+      return best;
+    };
     if (!loose){
       for (let i=0;i<8;i++){
         const s = TopGeom.fSlots[i];
         if (s && x>s.x && x<s.x+CARD_W && y>s.y && y<s.y+CARD_H)
           return {type:'foundation', idx:i};
       }
-      for (let i=devilsSix.length-1;i>=0;i--){
-        const dx = TopGeom.dsX + i*TopGeom.dsStep, dy=TopGeom.dsY;
-        if (x>dx && x<dx+CARD_W && y>dy && y<dy+CARD_H)
-          return {type:'devils', idx:i};
-      }
+      const devilHit = hitDevilsSix();
+      if (devilHit) return devilHit;
       if (stock.length && x>stockHit.x && x<stockHit.x+CARD_W && y>stockHit.y && y<stockHit.y+CARD_H)
         return {type:'stock'};
 
@@ -979,7 +987,9 @@
     const card = colArr[row];
     if (!card.faceUp) return false;
     const runLen = getRunLength(col, row);
-    if (row + runLen < colArr.length && colArr[row + runLen].faceUp) return false;
+    for (let i=row + runLen;i<colArr.length;i++){
+      if (colArr[i] && colArr[i].faceUp) return false;
+    }
     return true;
   }
 
