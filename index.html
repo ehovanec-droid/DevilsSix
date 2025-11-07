@@ -366,6 +366,17 @@
     const idx = topDevilsSixIndex();
     return idx >= 0 ? devilsSix[idx] : null;
   }
+  function peekDevilsSix(){
+    return topDevilsSixCard();
+  }
+  function popDevilsSix(){
+    if (!devilsSix.length) return null;
+    return devilsSix.pop();
+  }
+  function pushDevilsSix(card){
+    if (!card) return;
+    devilsSix.push(card);
+  }
   function shouldAnchorColumn(col){
     if (!col.length) return false;
     for (let i=0;i<col.length;i++) if (!col[i].faceUp) return false;
@@ -825,12 +836,12 @@
 
   function hitAt(x,y,loose=false){
     const hitDevilsSix = ()=>{
-      for (let i=devilsSix.length-1;i>=0;i--){
-        const dx = TopGeom.dsX + i*TopGeom.dsStep;
-        const dy = TopGeom.dsY;
-        if (x>=dx && x<=dx+CARD_W && y>=dy && y<=dy+CARD_H){
-          return {type:'devils', idx:i};
-        }
+      const idx = topDevilsSixIndex();
+      if (idx < 0) return null;
+      const dx = TopGeom.dsX + idx*TopGeom.dsStep;
+      const dy = TopGeom.dsY;
+      if (x>=dx && x<=dx+CARD_W && y>=dy && y<=dy+CARD_H){
+        return {type:'devils', idx};
       }
       return null;
     };
@@ -1381,7 +1392,7 @@
 
     if (hit.type === 'devils'){
       if (!isTopDevilsSixIndex(hit.idx)) return false;
-      const card = devilsSix[hit.idx];
+      const card = peekDevilsSix();
       if (card && card.value === 1){
         const candidates = [];
         for (let f=0;f<8;f++) if (SUITS[f%4] === card.suit) candidates.push(f);
@@ -1389,8 +1400,8 @@
         for (const f of candidates){
           if (foundations[f].length === 0){
             foundations[f].push(card);
-            devilsSix.splice(hit.idx,1);
-            undoStack.push({kind:'toFound', from:{type:'devils',idx:hit.idx}, fIdx:f, card});
+            popDevilsSix();
+            undoStack.push({kind:'toFound', from:{type:'devils'}, fIdx:f, card});
             placed = true;
             break;
           }
@@ -1399,8 +1410,8 @@
           for (const f of candidates){
             if (canPlaceOnFoundation(card, f)){
               foundations[f].push(card);
-              devilsSix.splice(hit.idx,1);
-              undoStack.push({kind:'toFound', from:{type:'devils',idx:hit.idx}, fIdx:f, card});
+              popDevilsSix();
+              undoStack.push({kind:'toFound', from:{type:'devils'}, fIdx:f, card});
               placed = true;
               break;
             }
@@ -1439,13 +1450,14 @@
     }
 
     if (hit.type === 'devils'){
-      if (!isTopDevilsSixIndex(hit.idx)) return false;
-      const card = devilsSix[hit.idx];
-      const origin = devilsCardPos(hit.idx);
+      const idx = topDevilsSixIndex();
+      if (idx < 0 || hit.idx !== idx) return false;
+      const card = peekDevilsSix();
+      const origin = devilsCardPos(idx);
       const offsetX = Math.max(0, Math.min(CARD_W, x - origin.x));
       const offsetY = Math.max(0, Math.min(CARD_H, y - origin.y));
       drag = {
-        from:{type:'devils', idx:hit.idx},
+        from:{type:'devils', idx},
         cards:[card],
         offsetX,
         offsetY,
@@ -1485,9 +1497,12 @@
           tableau[activeDrag.from.col].splice(activeDrag.from.idx,1);
           flipTop(activeDrag.from.col);
         } else {
-          devilsSix.splice(activeDrag.from.idx,1);
+          popDevilsSix();
         }
-        undoStack.push({kind:'toFound', from:JSON.parse(JSON.stringify(activeDrag.from)), fIdx:drop.idx, card:moving});
+        const from = activeDrag.from.type === 'tableau'
+          ? {type:'tableau', col:activeDrag.from.col, idx:activeDrag.from.idx}
+          : {type:'devils'};
+        undoStack.push({kind:'toFound', from, fIdx:drop.idx, card:moving});
         moved = true;
       }
       // tableau-to-tableau
@@ -1511,12 +1526,11 @@
       else if (drop.type === 'tableau' && activeDrag.from.type === 'devils' && canPlaceOnTableau(moving, drop.col)){
         const toCol = drop.col;
         tableau[toCol].push(moving);
-        devilsSix.splice(activeDrag.from.idx,1);
+        popDevilsSix();
         refreshAnchorForColumn(toCol);
         undoStack.push({
           kind:'devils2tab',
-          toCol,
-          fromIdx: activeDrag.from.idx
+          toCol
         });
         moved = true;
       }
@@ -1721,7 +1735,7 @@
     } else if (step.kind === 'devils2tab'){
       const card = tableau[step.toCol].pop();
       if (card){
-        devilsSix.splice(step.fromIdx,0,card);
+        pushDevilsSix(card);
       }
       refreshAnchorForColumn(step.toCol);
     } else if (step.kind === 'toFound'){
@@ -1729,8 +1743,8 @@
       if (step.from.type === 'tableau'){
         tableau[step.from.col].splice(step.from.idx,0,card);
         refreshAnchorForColumn(step.from.col);
-      } else {
-        devilsSix.splice(step.from.idx,0,card);
+      } else if (step.from.type === 'devils'){
+        pushDevilsSix(card);
       }
     }
     render();
@@ -1753,9 +1767,9 @@
     }
     const devilIdx = topDevilsSixIndex();
     if (devilIdx >= 0){
-      const card = devilsSix[devilIdx];
+      const card = peekDevilsSix();
       for (let f=0;f<8;f++){
-        if (canPlaceOnFoundation(card,f)){
+        if (card && canPlaceOnFoundation(card,f)){
           flash(()=>{ drawCard(card, TopGeom.dsX + devilIdx*TopGeom.dsStep, TopGeom.dsY, {highlight:true}); });
           return;
         }
