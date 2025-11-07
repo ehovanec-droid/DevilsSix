@@ -838,9 +838,11 @@
     const hitDevilsSix = ()=>{
       const idx = topDevilsSixIndex();
       if (idx < 0) return null;
-      const dx = TopGeom.dsX + idx*TopGeom.dsStep;
-      const dy = TopGeom.dsY;
-      if (x>=dx && x<=dx+CARD_W && y>=dy && y<=dy+CARD_H){
+      const left = TopGeom.dsX;
+      const right = left + CARD_W + Math.max(0, idx) * TopGeom.dsStep;
+      const top = TopGeom.dsY;
+      const bottom = top + CARD_H;
+      if (x>=left && x<=right && y>=top && y<=bottom){
         return {type:'devils', idx};
       }
       return null;
@@ -1007,7 +1009,14 @@
     const card = colArr[row];
     if (!card.faceUp) return false;
     const runLen = getRunLength(col, row);
-    for (let i=row + runLen;i<colArr.length;i++){
+    if (!runLen) return false;
+    const tailIdx = row + runLen - 1;
+    for (let i=row;i<=tailIdx;i++){
+      if (!colArr[i] || !colArr[i].faceUp) return false;
+    }
+    const below = colArr[tailIdx + 1];
+    if (below && below.faceUp) return false;
+    for (let i=tailIdx + 1;i<colArr.length;i++){
       if (colArr[i] && colArr[i].faceUp) return false;
     }
     return true;
