@@ -356,6 +356,16 @@
   function devilsCardPos(idx){
     return { x: TopGeom.dsX + idx * TopGeom.dsStep, y: TopGeom.dsY };
   }
+  function topDevilsSixIndex(){
+    return devilsSix.length ? devilsSix.length - 1 : -1;
+  }
+  function isTopDevilsSixIndex(idx){
+    return idx === topDevilsSixIndex();
+  }
+  function topDevilsSixCard(){
+    const idx = topDevilsSixIndex();
+    return idx >= 0 ? devilsSix[idx] : null;
+  }
   function shouldAnchorColumn(col){
     if (!col.length) return false;
     for (let i=0;i<col.length;i++) if (!col[i].faceUp) return false;
@@ -1065,8 +1075,9 @@
       if (!top) continue;
       for (let f=0;f<8;f++) if (canPlaceOnFoundation(top,f)) return true;
     }
-    for (const card of devilsSix){
-      for (let f=0;f<8;f++) if (canPlaceOnFoundation(card,f)) return true;
+    const topDevil = topDevilsSixCard();
+    if (topDevil){
+      for (let f=0;f<8;f++) if (canPlaceOnFoundation(topDevil,f)) return true;
     }
     for (let from=0;from<10;from++){
       const col = tableau[from];
@@ -1369,6 +1380,7 @@
     }
 
     if (hit.type === 'devils'){
+      if (!isTopDevilsSixIndex(hit.idx)) return false;
       const card = devilsSix[hit.idx];
       if (card && card.value === 1){
         const candidates = [];
@@ -1427,6 +1439,7 @@
     }
 
     if (hit.type === 'devils'){
+      if (!isTopDevilsSixIndex(hit.idx)) return false;
       const card = devilsSix[hit.idx];
       const origin = devilsCardPos(hit.idx);
       const offsetX = Math.max(0, Math.min(CARD_W, x - origin.x));
@@ -1738,11 +1751,12 @@
         }
       }
     }
-    for (let i=0;i<devilsSix.length;i++){
-      const card = devilsSix[i];
+    const devilIdx = topDevilsSixIndex();
+    if (devilIdx >= 0){
+      const card = devilsSix[devilIdx];
       for (let f=0;f<8;f++){
         if (canPlaceOnFoundation(card,f)){
-          flash(()=>{ drawCard(card, TopGeom.dsX + i*TopGeom.dsStep, TopGeom.dsY, {highlight:true}); });
+          flash(()=>{ drawCard(card, TopGeom.dsX + devilIdx*TopGeom.dsStep, TopGeom.dsY, {highlight:true}); });
           return;
         }
       }
