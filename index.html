@@ -815,15 +815,14 @@
 
   function hitAt(x,y,loose=false){
     const hitDevilsSix = ()=>{
-      let best = null;
-      for (let i=0;i<devilsSix.length;i++){
+      for (let i=devilsSix.length-1;i>=0;i--){
         const dx = TopGeom.dsX + i*TopGeom.dsStep;
         const dy = TopGeom.dsY;
-        if (x>dx && x<dx+CARD_W && y>dy && y<dy+CARD_H){
-          if (!best || i > best.idx) best = {type:'devils', idx:i};
+        if (x>=dx && x<=dx+CARD_W && y>=dy && y<=dy+CARD_H){
+          return {type:'devils', idx:i};
         }
       }
-      return best;
+      return null;
     };
     if (!loose){
       for (let i=0;i<8;i++){
