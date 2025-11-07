@@ -820,7 +820,7 @@
         if (s && x>s.x && x<s.x+CARD_W && y>s.y && y<s.y+CARD_H)
           return {type:'foundation', idx:i};
       }
-      for (let i=0;i<devilsSix.length;i++){
+      for (let i=devilsSix.length-1;i>=0;i--){
         const dx = TopGeom.dsX + i*TopGeom.dsStep, dy=TopGeom.dsY;
         if (x>dx && x<dx+CARD_W && y>dy && y<dy+CARD_H)
           return {type:'devils', idx:i};
@@ -978,6 +978,8 @@
     if (row < 0 || row >= colArr.length) return false;
     const card = colArr[row];
     if (!card.faceUp) return false;
+    const runLen = getRunLength(col, row);
+    if (row + runLen < colArr.length && colArr[row + runLen].faceUp) return false;
     return true;
   }
 
