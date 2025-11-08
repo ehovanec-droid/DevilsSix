@@ -1006,6 +1006,9 @@
   function canStartDragAt(col, row){
     const colArr = tableau[col];
     if (row < 0 || row >= colArr.length) return false;
+    // Prevent illegal sub-run drags by only allowing the first face-up card to start a move.
+    const firstFaceUp = colArr.findIndex(c => c && c.faceUp);
+    if (firstFaceUp < 0 || row !== firstFaceUp) return false;
     const card = colArr[row];
     if (!card.faceUp) return false;
     const runLen = getRunLength(col, row);
@@ -1402,7 +1405,9 @@
     if (hit.type === 'devils'){
       if (!isTopDevilsSixIndex(hit.idx)) return false;
       const card = peekDevilsSix();
-      if (card && card.value === 1){
+      if (!card) return false;
+      // All Devil's Six interactions must operate on the visible top card only.
+      if (card.value === 1){
         const candidates = [];
         for (let f=0;f<8;f++) if (SUITS[f%4] === card.suit) candidates.push(f);
         let placed = false;
@@ -1462,6 +1467,8 @@
       const idx = topDevilsSixIndex();
       if (idx < 0 || hit.idx !== idx) return false;
       const card = peekDevilsSix();
+      if (!card) return false;
+      // Dragging from the reserve always lifts only the single top card.
       const origin = devilsCardPos(idx);
       const offsetX = Math.max(0, Math.min(CARD_W, x - origin.x));
       const offsetY = Math.max(0, Math.min(CARD_H, y - origin.y));
