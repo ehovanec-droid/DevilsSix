@@ -996,7 +996,7 @@
     const colArr = tableau[col];
     const firstFaceUp = colArr.findIndex(c => c && c.faceUp);
     if (firstFaceUp === -1) return false;
-    if (row !== firstFaceUp) return false;
+    if (row < firstFaceUp) return false;
     if (row < 0 || row >= colArr.length) return false;
     const card = colArr[row];
     if (!card.faceUp) return false;
