@@ -377,6 +377,14 @@
     if (!card) return;
     devilsSix.push(card);
   }
+  function ensureDevilsSixTop(card, context){
+    const top = peekDevilsSix();
+    if (card !== top){
+      console.warn(`Devil's Six guard: attempted to ${context} a non-top reserve card.`);
+      return false;
+    }
+    return true;
+  }
   function shouldAnchorColumn(col){
     if (!col.length) return false;
     for (let i=0;i<col.length;i++) if (!col[i].faceUp) return false;
@@ -835,27 +843,30 @@
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
   function hitAt(x,y,loose=false){
+    const nx = x;
+    const ny = y;
     const hitDevilsSix = ()=>{
       const idx = topDevilsSixIndex();
       if (idx < 0) return null;
-      const left = TopGeom.dsX;
-      const right = left + CARD_W + Math.max(0, idx) * TopGeom.dsStep;
-      const top = TopGeom.dsY;
+      const pos = devilsCardPos(idx);
+      const left = pos.x;
+      const right = left + CARD_W;
+      const top = pos.y;
       const bottom = top + CARD_H;
-      if (x>=left && x<=right && y>=top && y<=bottom){
+      if (nx>=left && nx<=right && ny>=top && ny<=bottom){
         return {type:'devils', idx};
       }
       return null;
     };
     if (!loose){
-      for (let i=0;i<8;i++){
-        const s = TopGeom.fSlots[i];
-        if (s && x>s.x && x<s.x+CARD_W && y>s.y && y<s.y+CARD_H)
-          return {type:'foundation', idx:i};
-      }
       const devilHit = hitDevilsSix();
       if (devilHit) return devilHit;
-      if (stock.length && x>stockHit.x && x<stockHit.x+CARD_W && y>stockHit.y && y<stockHit.y+CARD_H)
+      for (let i=0;i<8;i++){
+        const s = TopGeom.fSlots[i];
+        if (s && nx>s.x && nx<s.x+CARD_W && ny>s.y && ny<s.y+CARD_H)
+          return {type:'foundation', idx:i};
+      }
+      if (stock.length && nx>stockHit.x && nx<stockHit.x+CARD_W && ny>stockHit.y && ny<stockHit.y+CARD_H)
         return {type:'stock'};
 
       const tY = tableauTopY();
@@ -863,12 +874,12 @@
         const cx = colX(c);
         const col = tableau[c];
         if (!col.length){
-          if (x>cx && x<cx+CARD_W && y>tY && y<tY+CARD_H) return {type:'tableau', col:c, row:-1};
+          if (nx>cx && nx<cx+CARD_W && ny>tY && ny<tY+CARD_H) return {type:'tableau', col:c, row:-1};
           continue;
         }
         for (let i=col.length-1;i>=0;i--){
           const cy = tableauRowTop(c, i);
-          if (x>cx && x<cx+CARD_W && y>cy && y<cy+CARD_H)
+          if (nx>cx && nx<cx+CARD_W && ny>cy && ny<cy+CARD_H)
             return {type:'tableau', col:c, row:i};
         }
       }
@@ -877,13 +888,13 @@
 
     const candidates = [];
     const pushCandidate = (hit, left, top, right, bottom, priority=0)=>{
-      if (x < left || x > right || y < top || y > bottom) return;
+      if (nx < left || nx > right || ny < top || ny > bottom) return;
       const centerX = (left + right) / 2;
       const centerY = (top + bottom) / 2;
       const halfW = Math.max(1, (right - left) / 2);
       const halfH = Math.max(1, (bottom - top) / 2);
-      const normX = (x - centerX) / halfW;
-      const normY = (y - centerY) / halfH;
+      const normX = (nx - centerX) / halfW;
+      const normY = (ny - centerY) / halfH;
       const score = normX * normX + normY * normY + priority;
       candidates.push({score, hit});
     };
@@ -1006,22 +1017,34 @@
   function canStartDragAt(col, row){
     const colArr = tableau[col];
     if (row < 0 || row >= colArr.length) return false;
-    // Prevent illegal sub-run drags by only allowing the first face-up card to start a move.
-    const firstFaceUp = colArr.findIndex(c => c && c.faceUp);
-    if (firstFaceUp < 0 || row !== firstFaceUp) return false;
     const card = colArr[row];
-    if (!card.faceUp) return false;
-    const runLen = getRunLength(col, row);
-    if (!runLen) return false;
-    const tailIdx = row + runLen - 1;
+    if (!card || !card.faceUp) return false;
+    let firstFaceUp = -1;
+    for (let i=0;i<colArr.length;i++){
+      if (colArr[i] && colArr[i].faceUp){
+        firstFaceUp = i;
+        break;
+      }
+    }
+    if (firstFaceUp < 0 || row !== firstFaceUp) return false;
+    let tailIdx = row;
+    for (let i=row;i<colArr.length;i++){
+      const cur = colArr[i];
+      if (!cur || !cur.faceUp) break;
+      tailIdx = i;
+      const next = colArr[i+1];
+      if (!next || !next.faceUp) break;
+      if (next.color === cur.color) return false;
+      if (next.value !== cur.value - 1) return false;
+    }
     for (let i=row;i<=tailIdx;i++){
       if (!colArr[i] || !colArr[i].faceUp) return false;
     }
-    const below = colArr[tailIdx + 1];
-    if (below && below.faceUp) return false;
     for (let i=tailIdx + 1;i<colArr.length;i++){
       if (colArr[i] && colArr[i].faceUp) return false;
     }
+    const below = colArr[tailIdx + 1];
+    if (below && below.faceUp) return false;
     return true;
   }
 
@@ -1098,7 +1121,7 @@
       if (!top) continue;
       for (let f=0;f<8;f++) if (canPlaceOnFoundation(top,f)) return true;
     }
-    const topDevil = topDevilsSixCard();
+    const topDevil = peekDevilsSix();
     if (topDevil){
       for (let f=0;f<8;f++) if (canPlaceOnFoundation(topDevil,f)) return true;
     }
@@ -1301,9 +1324,13 @@
   }
   function hideMessage(){ document.getElementById('message').style.display = 'none'; }
 
+  function normalizeHitCoords(clientX, clientY){
+    const rect = canvas.getBoundingClientRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
   function getCanvasPos(clientX, clientY){
-    const r = canvas.getBoundingClientRect();
-    return { x: clientX - r.left, y: clientY - r.top };
+    return normalizeHitCoords(clientX, clientY);
   }
 
   function computeDragSnap(x, y){
@@ -1406,6 +1433,7 @@
       if (!isTopDevilsSixIndex(hit.idx)) return false;
       const card = peekDevilsSix();
       if (!card) return false;
+      if (!ensureDevilsSixTop(card, 'auto-play from reserve')) return false;
       // All Devil's Six interactions must operate on the visible top card only.
       if (card.value === 1){
         const candidates = [];
@@ -1468,6 +1496,7 @@
       if (idx < 0 || hit.idx !== idx) return false;
       const card = peekDevilsSix();
       if (!card) return false;
+      if (!ensureDevilsSixTop(card, 'start a drag from reserve')) return false;
       // Dragging from the reserve always lifts only the single top card.
       const origin = devilsCardPos(idx);
       const offsetX = Math.max(0, Math.min(CARD_W, x - origin.x));
@@ -1508,18 +1537,22 @@
     if (drop){
       // to foundation
       if (drop.type === 'foundation' && activeDrag.cards.length === 1 && canPlaceOnFoundation(moving, drop.idx)){
-        foundations[drop.idx].push(moving);
-        if (activeDrag.from.type === 'tableau'){
-          tableau[activeDrag.from.col].splice(activeDrag.from.idx,1);
-          flipTop(activeDrag.from.col);
+        if (activeDrag.from.type === 'devils' && !ensureDevilsSixTop(moving, 'drop reserve card onto foundation')){
+          // guard failed; do nothing.
         } else {
-          popDevilsSix();
+          foundations[drop.idx].push(moving);
+          if (activeDrag.from.type === 'tableau'){
+            tableau[activeDrag.from.col].splice(activeDrag.from.idx,1);
+            flipTop(activeDrag.from.col);
+          } else {
+            popDevilsSix();
+          }
+          const from = activeDrag.from.type === 'tableau'
+            ? {type:'tableau', col:activeDrag.from.col, idx:activeDrag.from.idx}
+            : {type:'devils'};
+          undoStack.push({kind:'toFound', from, fIdx:drop.idx, card:moving});
+          moved = true;
         }
-        const from = activeDrag.from.type === 'tableau'
-          ? {type:'tableau', col:activeDrag.from.col, idx:activeDrag.from.idx}
-          : {type:'devils'};
-        undoStack.push({kind:'toFound', from, fIdx:drop.idx, card:moving});
-        moved = true;
       }
       // tableau-to-tableau
       else if (drop.type === 'tableau' && activeDrag.from.type === 'tableau' && canPlaceOnTableau(moving, drop.col)){
@@ -1540,15 +1573,19 @@
         moved = true;
       }
       else if (drop.type === 'tableau' && activeDrag.from.type === 'devils' && canPlaceOnTableau(moving, drop.col)){
-        const toCol = drop.col;
-        tableau[toCol].push(moving);
-        popDevilsSix();
-        refreshAnchorForColumn(toCol);
-        undoStack.push({
-          kind:'devils2tab',
-          toCol
-        });
-        moved = true;
+        if (!ensureDevilsSixTop(moving, 'drop reserve card onto tableau')){
+          // guard failed; do nothing.
+        } else {
+          const toCol = drop.col;
+          tableau[toCol].push(moving);
+          popDevilsSix();
+          refreshAnchorForColumn(toCol);
+          undoStack.push({
+            kind:'devils2tab',
+            toCol
+          });
+          moved = true;
+        }
       }
     }
 
@@ -1784,9 +1821,10 @@
     const devilIdx = topDevilsSixIndex();
     if (devilIdx >= 0){
       const card = peekDevilsSix();
+      const pos = devilsCardPos(devilIdx);
       for (let f=0;f<8;f++){
         if (card && canPlaceOnFoundation(card,f)){
-          flash(()=>{ drawCard(card, TopGeom.dsX + devilIdx*TopGeom.dsStep, TopGeom.dsY, {highlight:true}); });
+          flash(()=>{ drawCard(card, pos.x, pos.y, {highlight:true}); });
           return;
         }
       }
