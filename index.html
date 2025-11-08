@@ -294,6 +294,25 @@
 
   let tableau = new Array(10).fill(0).map(()=>[]);
   let devilsSix = [];
+  function topDevilsSixIndex(){
+    return devilsSix.length ? devilsSix.length - 1 : -1;
+  }
+  function topDevilsSixCard(){
+    const idx = topDevilsSixIndex();
+    return idx >= 0 ? devilsSix[idx] : null;
+  }
+  function peekDevilsSix(){
+    return topDevilsSixCard();
+  }
+  function popDevilsSix(){
+    if (!devilsSix.length) return null;
+    return devilsSix.pop();
+  }
+  function pushDevilsSix(card){
+    if (!card) return null;
+    devilsSix.push(card);
+    return card;
+  }
   let foundations = new Array(8).fill(0).map(()=>[]);
   let stock = [];
   let deck = [];
@@ -975,6 +994,9 @@
   }
   function canStartDragAt(col, row){
     const colArr = tableau[col];
+    const firstFaceUp = colArr.findIndex(c => c && c.faceUp);
+    if (firstFaceUp === -1) return false;
+    if (row !== firstFaceUp) return false;
     if (row < 0 || row >= colArr.length) return false;
     const card = colArr[row];
     if (!card.faceUp) return false;
@@ -1054,8 +1076,9 @@
       if (!top) continue;
       for (let f=0;f<8;f++) if (canPlaceOnFoundation(top,f)) return true;
     }
-    for (const card of devilsSix){
-      for (let f=0;f<8;f++) if (canPlaceOnFoundation(card,f)) return true;
+    const topDevil = topDevilsSixCard();
+    if (topDevil){
+      for (let f=0;f<8;f++) if (canPlaceOnFoundation(topDevil,f)) return true;
     }
     for (let from=0;from<10;from++){
       const col = tableau[from];
@@ -1358,16 +1381,17 @@
     }
 
     if (hit.type === 'devils'){
-      const card = devilsSix[hit.idx];
-      if (card && card.value === 1){
+      const card = topDevilsSixCard();
+      const topIdx = topDevilsSixIndex();
+      if (card && topIdx >= 0 && card.value === 1){
         const candidates = [];
         for (let f=0;f<8;f++) if (SUITS[f%4] === card.suit) candidates.push(f);
         let placed = false;
         for (const f of candidates){
           if (foundations[f].length === 0){
             foundations[f].push(card);
-            devilsSix.splice(hit.idx,1);
-            undoStack.push({kind:'toFound', from:{type:'devils',idx:hit.idx}, fIdx:f, card});
+            popDevilsSix();
+            undoStack.push({kind:'toFound', from:{type:'devils'}, fIdx:f, card});
             placed = true;
             break;
           }
@@ -1376,8 +1400,8 @@
           for (const f of candidates){
             if (canPlaceOnFoundation(card, f)){
               foundations[f].push(card);
-              devilsSix.splice(hit.idx,1);
-              undoStack.push({kind:'toFound', from:{type:'devils',idx:hit.idx}, fIdx:f, card});
+              popDevilsSix();
+              undoStack.push({kind:'toFound', from:{type:'devils'}, fIdx:f, card});
               placed = true;
               break;
             }
@@ -1416,12 +1440,14 @@
     }
 
     if (hit.type === 'devils'){
-      const card = devilsSix[hit.idx];
-      const origin = devilsCardPos(hit.idx);
+      const topIdx = topDevilsSixIndex();
+      const card = topDevilsSixCard();
+      if (topIdx < 0 || !card) return false;
+      const origin = devilsCardPos(topIdx);
       const offsetX = Math.max(0, Math.min(CARD_W, x - origin.x));
       const offsetY = Math.max(0, Math.min(CARD_H, y - origin.y));
       drag = {
-        from:{type:'devils', idx:hit.idx},
+        from:{type:'devils', idx:topIdx},
         cards:[card],
         offsetX,
         offsetY,
@@ -1461,9 +1487,12 @@
           tableau[activeDrag.from.col].splice(activeDrag.from.idx,1);
           flipTop(activeDrag.from.col);
         } else {
-          devilsSix.splice(activeDrag.from.idx,1);
+          popDevilsSix();
         }
-        undoStack.push({kind:'toFound', from:JSON.parse(JSON.stringify(activeDrag.from)), fIdx:drop.idx, card:moving});
+        const undoFrom = activeDrag.from.type === 'devils'
+          ? {type:'devils'}
+          : JSON.parse(JSON.stringify(activeDrag.from));
+        undoStack.push({kind:'toFound', from:undoFrom, fIdx:drop.idx, card:moving});
         moved = true;
       }
       // tableau-to-tableau
@@ -1487,12 +1516,11 @@
       else if (drop.type === 'tableau' && activeDrag.from.type === 'devils' && canPlaceOnTableau(moving, drop.col)){
         const toCol = drop.col;
         tableau[toCol].push(moving);
-        devilsSix.splice(activeDrag.from.idx,1);
+        popDevilsSix();
         refreshAnchorForColumn(toCol);
         undoStack.push({
           kind:'devils2tab',
-          toCol,
-          fromIdx: activeDrag.from.idx
+          toCol
         });
         moved = true;
       }
@@ -1697,7 +1725,7 @@
     } else if (step.kind === 'devils2tab'){
       const card = tableau[step.toCol].pop();
       if (card){
-        devilsSix.splice(step.fromIdx,0,card);
+        pushDevilsSix(card);
       }
       refreshAnchorForColumn(step.toCol);
     } else if (step.kind === 'toFound'){
@@ -1706,7 +1734,7 @@
         tableau[step.from.col].splice(step.from.idx,0,card);
         refreshAnchorForColumn(step.from.col);
       } else {
-        devilsSix.splice(step.from.idx,0,card);
+        pushDevilsSix(card);
       }
     }
     render();
@@ -1727,11 +1755,12 @@
         }
       }
     }
-    for (let i=0;i<devilsSix.length;i++){
-      const card = devilsSix[i];
+    const topDevilIdx = topDevilsSixIndex();
+    const topDevil = topDevilsSixCard();
+    if (topDevil && topDevilIdx >= 0){
       for (let f=0;f<8;f++){
-        if (canPlaceOnFoundation(card,f)){
-          flash(()=>{ drawCard(card, TopGeom.dsX + i*TopGeom.dsStep, TopGeom.dsY, {highlight:true}); });
+        if (canPlaceOnFoundation(topDevil,f)){
+          flash(()=>{ drawCard(topDevil, TopGeom.dsX + topDevilIdx*TopGeom.dsStep, TopGeom.dsY, {highlight:true}); });
           return;
         }
       }
