@@ -994,12 +994,28 @@
   }
   function canStartDragAt(col, row){
     const colArr = tableau[col];
-    const firstFaceUp = colArr.findIndex(c => c && c.faceUp);
-    if (firstFaceUp === -1) return false;
-    if (row < firstFaceUp) return false;
-    if (row < 0 || row >= colArr.length) return false;
-    const card = colArr[row];
-    if (!card.faceUp) return false;
+    if (!colArr || row < 0 || row >= colArr.length) return false;
+
+    // Must be face-up
+    const start = colArr[row];
+    if (!start || !start.faceUp) return false;
+
+    // If there are *any* face-up cards above 'row' that do not form a valid
+    // descending-by-1, alternating-color chain all the way to the top,
+    // then you cannot start a drag at 'row'.
+    // (Top card is at index colArr.length - 1.)
+    for (let i = row + 1; i < colArr.length; i++){
+      const prev = colArr[i - 1];
+      const cur  = colArr[i];
+
+      // Any face-down above blocks starting below it
+      if (!cur || !cur.faceUp) return false;
+
+      // Must alternate color and descend by one at every adjacent step
+      if (prev.color === cur.color) return false;
+      if (cur.value !== prev.value - 1) return false;
+    }
+
     return true;
   }
 
